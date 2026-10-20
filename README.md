@@ -1,44 +1,93 @@
 # SaaSBridge
 
-Connecting your customers to answers.
+**An observable, extensible customer support Agent Runtime.**
 
-A Python multi-agent support foundation for B2B SaaS, with a Vue support console.
+SaaSBridge is a Python runtime for intelligent customer support across B2B SaaS
+and e-commerce scenarios, with a Vue support console. It coordinates specialized
+Agents for general inquiries, technical troubleshooting and billing, combining
+RAG, layered memory, dynamic Skills, validated tool calls, caching, graceful
+degradation and automated evaluation in one request-processing workflow.
+
+面向企业软件与电商场景的客服 Agent Runtime：将多 Agent 编排、RAG、分层记忆、动态 Skills、工具调用、缓存降级、自动化评测和可观测性整合在同一运行框架中。
+
+The current product focus is **B2B SaaS**: API integration, feature questions,
+onboarding, subscriptions and enterprise accounts. Foundational e-commerce
+intents and support workflows remain available. Live order, payment, account
+and ticket operations require an authorized business-system integration.
+
+## Runtime capabilities
+
+| Capability | Implemented behavior | Code |
+| --- | --- | --- |
+| Multi-agent orchestration | Intent routing, specialist selection, parallel collaboration, response composition and degraded-agent fallback | [Orchestrator](agents/agent_orchestrator.py) |
+| RAG | ChromaDB retrieval, query rewriting, parallel recall, deduplication and reranking; OpenAPI JSON/YAML import with source/version metadata | [Knowledge base](tooling/knowledge_base.py), [retrieval pipeline](tooling/tool_manager.py), [OpenAPI importer](tooling/openapi_import.py) |
+| Layered memory | Redis working memory, ChromaDB episodic memory and user profiles, conversation-state tracking and summary compression | [Memory manager](memory/conversation_memory.py) |
+| Dynamic Skills | Role/keyword matching, prompt-budget limits and automatic refresh when skill files are added, edited or removed | [Skill loader](core/skill_loader.py), [role rules](skills/README.md) |
+| Tool calling | Model-driven tool loops, JSON Schema validation, role allowlists, local diagnostic tools and configurable standard MCP connections | [Agent tools](agents/tools.py), [MCP client](tooling/mcp_client.py) |
+| Caching and graceful degradation | TTL caches, cache invalidation, timeouts, circuit breakers, explicit tool fallbacks and Agent recovery routing | [Tool manager](tooling/tool_manager.py), [orchestrator](agents/agent_orchestrator.py) |
+| Automated evaluation | Intent accuracy/Macro-F1, single- and multi-turn dialogue evaluation, LLM Judge, deterministic checks and baseline regression comparisons | [Evaluator](evaluation/evaluator.py), [evaluation jobs](evaluation/jobs.py) |
+| Observability | Request IDs, routing reasons, tool traces, latency/success metrics, Prometheus export, alert rules and monitor-informed routing penalties | [Monitor](monitor/performance_monitor.py), [alert rules](config/alerts/saasbridge.yml) |
+
+The runtime is exposed through FastAPI. The Vue console brings chat, knowledge
+management, tool traces, evaluation and monitoring into the same interface.
+
+## How a support turn runs
+
+```mermaid
+flowchart TD
+    UI[Vue console or REST client] --> API[FastAPI chat endpoint]
+    API --> Memory[Load working memory, relevant history and profile]
+    Memory --> Intent[Recognize intent and extract entities]
+    Intent --> Route[Route and coordinate Agents]
+    Route --> Agent[Specialist response and tool loop]
+    Skills[Dynamic role Skills] --> Agent
+    Agent <--> Tools[Validate and execute allowed tools]
+    Tools <--> RAG[RAG knowledge retrieval]
+    Tools <--> MCP[Configured MCP business services]
+    Agent --> Reply[Compose response and commit the turn]
+    Reply --> UI
+    Reply -.-> Maintain[Background memory maintenance]
+    Agent -.-> Observe[Tool traces and performance metrics]
+    Eval[Automated evaluation] -.-> Route
+```
+
+Conversation locking and request receipts protect turn handling and retries.
+Potentially mutating tools carry retry-safety metadata; unknown write outcomes
+are not automatically replayed. Business services remain responsible for their
+own authorization, confirmation, transaction and idempotency guarantees.
+
+## Support Agents
+
+| Agent | Responsibilities | Typical intents |
+| --- | --- | --- |
+| `GeneralAgent` | General inquiries, clarification and initial triage | General queries and retained e-commerce support intents |
+| `TechnicalAgent` | Application failures, login problems and diagnostic guidance | Technical/login/crash |
+| `BillingAgent` | Billing, invoices, payment questions and subscription guidance | Billing/refund/invoice/payment, `subscription` |
+| `APIAgent` | API documentation, authentication, error codes and safe debugging | `api_integration` |
+| `OnboardingAgent` | Product features, initial configuration and guided setup | `feature_inquiry`, `onboarding` |
+| `EnterpriseAgent` | Organization context, team roles, seats and contract-renewal guidance | `enterprise_mgmt` |
+| `EscalationAgent` | Human handoff summaries for urgent or privileged requests | Explicit handoff and escalation |
+
+English and Chinese intent examples and keyword patterns are included. Agent
+replies follow the user's language. The roles share the selected model provider;
+they do not require seven separately deployed models.
 
 ## Project layout
 
 ```text
-D:\SaaSBridge\
-  agents/ core/ api/       Python backend and SaaS agents
-  memory/ tooling/         Memory, knowledge retrieval and tool integrations
-  evaluation/ monitor/     Evaluation and monitoring
-  skills/                 Original and SaaS-specific support instructions
-  frontend/               Imported Vue support console
-  config/                 MCP and monitoring configuration
-  examples/               Example OpenAPI specification
+SaaSBridge/
+  agents/ core/ api/       Agent profiles, routing, Skills and FastAPI endpoints
+  memory/ tooling/        Layered memory, RAG and tool/MCP execution
+  evaluation/ monitor/    Evaluation jobs, regression baselines and telemetry
+  skills/                 General and SaaS-specific support instructions
+  frontend/               Vue support console
+  config/                 MCP templates, Prometheus and alert configuration
+  examples/               OpenAPI and product-knowledge templates
+  docs/                   SaaS configuration and model-provider guidance
   tests/                  Backend regression tests
-  compose.yaml            Local Redis and ChromaDB services
-  compose.app.yaml        Python application and frontend services
+  compose.yaml            Redis and ChromaDB services
+  compose.app.yaml        Application, console and optional monitoring
 ```
-
-The frontend provides SaaS support prompts, chat, knowledge management,
-evaluation and monitoring. The active deployment uses the Python backend.
-
-## Agents
-
-| Intent | Agent | Responsibility |
-|---|---|---|
-| `api_integration` | APIAgent | API documentation, redacted diagnostics, error codes |
-| `feature_inquiry` | OnboardingAgent | Documented product capabilities |
-| `onboarding` | OnboardingAgent | Setup and first-use guidance |
-| `enterprise_mgmt` | EnterpriseAgent | Team roles, enterprise accounts, renewal guidance |
-| `subscription` | BillingAgent | Plan and billing guidance |
-| Existing technical / billing intents | TechnicalAgent / BillingAgent | Original support workflows |
-| General / human handoff | GeneralAgent / EscalationAgent | Triage and handoff summaries |
-
-EchoMind's FastAPI service, memory, retrieval, tool loop, performance routing,
-evaluation, authentication and tests are retained. New specialists participate in
-the existing circuit breaker and fallback behavior. Intent examples and keyword
-patterns support English and Chinese. Agent replies follow the user's language.
 
 ## Local setup (PowerShell, Python 3.12)
 
@@ -49,10 +98,11 @@ py -3.12 -m venv .venv
 if (!(Test-Path .env)) { Copy-Item .env.example .env }
 ```
 
-Configure the Qwen connection below in `.env`.
-Alternatively, set `LLM_PROVIDER=anthropic`, `ANTHROPIC_API_KEY` and
-`ANTHROPIC_MODEL`; an Anthropic-compatible provider also needs its
-`ANTHROPIC_BASE_URL`. No original credentials were copied.
+Choose a model provider in the private backend `.env`. The sample configuration
+defaults to Qwen; the runtime also includes Anthropic-compatible, Groq and Hugging
+Face adapters. See [model provider configuration](docs/MODEL_PROVIDERS.md) for
+connection settings and checks. Provider availability, quotas and billing are
+controlled by the provider account. Keep real keys out of Git and frontend settings.
 If `py` is unavailable, use the full path to your installed Python executable.
 
 Start Redis and ChromaDB with Docker Desktop running, then start the backend:
@@ -75,127 +125,9 @@ External MCP connections and retail demo knowledge seeding are disabled by defau
 Inherited `ECHOMIND_*` configuration names remain compatible with the upstream code.
 The Compose file runs local development storage services; it is not a production deployment.
 
-## Qwen API connection
-
-The default configuration uses **Qwen Flash** (`qwen-flash`) through Alibaba
-Model Studio. The endpoint must match the workspace and region that issued your
-key. Copy the exact OpenAI-compatible Base URL from the provider console:
-
-```dotenv
-LLM_PROVIDER=qwen
-QWEN_API_KEY=replace_with_your_private_key
-QWEN_BASE_URL=https://YOUR_WORKSPACE.cn-beijing.maas.aliyuncs.com/compatible-mode/v1
-QWEN_MODEL=qwen-flash
-```
-
-Set these in the backend `.env` only. The real file is excluded from Git and
-Docker build context; `.env.example` contains placeholders. Never put the key in
-frontend settings, screenshots or source code. Requests send it only in the HTTPS
-Authorization header. The adapter rejects non-Alibaba endpoints, does not follow
-redirects, and omits raw provider errors from diagnostics.
-
-Qwen calls are **usage-based**, including calls made by the connection check.
-Beijing is not covered by the current international Singapore trial offer.
-For eligible Singapore trial models, turn on **Free Quota Only** in the provider
-console if you need requests to stop when free tokens run out. A local setting
-does not control provider billing. See
-[Alibaba's quota rules](https://www.alibabacloud.com/help/en/model-studio/new-free-quota).
-
-Run `python -m tooling.check_llm --tools` from an activated backend environment
-to check text generation and a read-only tool round trip. This uses at most three
-small requests and prints status/token counts without the key. The adapter turns
-off thinking mode for short support answers, intent JSON and forced tool tests.
-There is no automatic provider switch or HTTP retry. Restart the backend after
-editing `.env`.
-
-## Optional free model API for the demo
-
-The optional free provider is **Groq**, using `qwen/qwen3.8-27b` (a preview model with
-tool calling and multilingual support). Use a **Groq Free Plan account**.
-Groq's [Free Plan FAQ](https://community.groq.com/t/do-i-get-charged-for-anything-on-the-groq-free-plan/832)
-states that usage on the Free Plan is not charged; exceeding its limits returns
-HTTP 429. Do not upgrade to the paid Developer plan for this free demo.
-The account plan determines billing: the same model is billable on paid plans.
-
-1. Sign up or log in at [Groq Console](https://console.groq.com).
-2. Stay on the Free Plan and create a key at [API Keys](https://console.groq.com/keys).
-3. Save the key locally in `D:\SaaSBridge\.env`:
-
-```dotenv
-LLM_PROVIDER=groq
-GROQ_API_KEY=gsk_replace_with_your_key
-GROQ_MODEL=qwen/qwen3.8-27b
-GROQ_REASONING_EFFORT=none
-GROQ_REASONING_FORMAT=hidden
-```
-
-No local GPU or chat model download is required; Groq hosts the model. The local
-knowledge embedding model is separate. A Hugging Face token does not work as a
-Groq key. Existing `HF_*` settings are ignored while `LLM_PROVIDER=groq`.
-
-Keep `.env` private. Do not place the key in frontend settings. Restart the
-backend after changing model configuration. Docker deployments need the app
-container recreated to reload `.env`.
-
-Test the real API before starting storage or the web application:
-
-```powershell
-cd D:\SaaSBridge
-.\.venv\Scripts\python.exe -m tooling.check_llm --tools
-```
-
-This spends up to three small model requests: a synthetic greeting, an error-code
-tool call, and its final answer. It checks both text generation and tool calling
-without accessing customer records. It prints status and token counts, never the
-key. HTTP 401/403 indicates credentials/permissions; HTTP 429 means wait for the
-relevant quota to reset.
-
-All agents, intent detection, retrieval rewriting/reranking, memory maintenance
-and evaluation use the selected provider. The adapter translates the inherited
-Anthropic text/tool format to Groq's chat endpoint, preserving existing tool
-validation and allowlists. There are no automatic HTTP retries or automatic
-fallback to Hugging Face, Anthropic or any other provider. Agent fallback within
-the application still uses the same configured Groq connection. SaaSBridge does
-not upgrade accounts or buy credits.
-
-On 2026-10-20, Groq's published
-[Free Plan limits](https://console.groq.com/docs/rate-limits) for this model were:
-30 requests/minute, 1,000 requests/day, 8,000 tokens/minute and 200,000 tokens/day.
-The first limit reached applies. Exact account limits and model availability can
-change; check your Groq Console. This is suitable for light demo testing rather
-than unrestricted traffic.
-
-A basic uncached support turn normally makes two foreground model requests
-(intent detection and the answer), plus a background profile update. Retrieval,
-tool loops, collaboration and occasional memory compression add requests.
-The seven roles share the configured API model; they do not require seven local
-models. The workload is modest for a development demo, but production throughput
-depends on concurrent users and prompt/context length.
-
-## Optional paid Hugging Face connection
-
-This is not used by the default Qwen configuration. To explicitly opt in,
-set `LLM_PROVIDER=huggingface`, `HF_TOKEN`, and
-`HF_MODEL=deepseek-ai/DeepSeek-V4-Flash:deepinfra`.
-Set `HF_REASONING_EFFORT=none` for short support/JSON tasks.
-Create a fine-grained token with **Make calls to Inference Providers** permission
-at [Hugging Face token settings](https://huggingface.co/settings/tokens).
-
-The [HF model catalog](https://router.huggingface.co/v1/models) listed this
-DeepInfra route at **US$0.09 per million input tokens / $0.18 per million output
-tokens** when checked on 2026-10-20. For illustration, 5,000 input + 1,000 output
-tokens combined across a turn's calls would cost $0.00063, or $0.63 per 1,000
-such turns. These token counts are an example, not a measured application average.
-Rates and availability can change. Hugging Face is pay-as-you-go. Its current
-pricing page lists **no included monthly credits for free accounts**; purchasing
-credits is required. HTTP 402 indicates insufficient credits. Older references to a $0.10 free
-credit are outdated.
-See [pricing](https://huggingface.co/docs/inference-providers/en/pricing) and
-[authentication](https://huggingface.co/docs/inference-providers/en/index#authentication).
-
 ## Frontend
 
-The imported Vue console includes chat, tool traces, knowledge search/import,
+The Vue console includes chat, tool traces, knowledge search/import,
 evaluation and monitoring details. With the Python backend running locally:
 
 ```powershell
@@ -268,6 +200,48 @@ automatic Skill refresh, disabled external-system templates, working-memory TTL
 and Prometheus alerts. Knowledge templates for release notes and integration
 FAQs are in `examples/saas-knowledge.template.json`; replace placeholders before import.
 
+## Evaluation and observability
+
+The console can submit an evaluation job and poll its progress. The API exposes
+`POST /eval/run` and `GET /eval/jobs/{job_id}`. Evaluation runs automatically after
+it is triggered and compares compatible, valid suites against saved baselines.
+Live model-based evaluation uses the selected LLM provider.
+
+Evaluation uses separate routing state, tool caches and circuit breakers, and
+excludes tools marked unsafe to retry. Its dialogue scope is the orchestrator;
+HTTP reliability and storage behavior are covered separately by regression tests.
+The job queue is process-local and does not survive a service restart. There is
+currently no GitHub Actions workflow that runs these evaluations on every push.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /monitor` | Agent/tool statistics, alerts and routing suggestions |
+| `GET /trace/tool/{request_id}` | Trace of a particular request's tool calls |
+| `GET /trace/tools` | Recent tool-call traces |
+| `GET /metrics` | Prometheus metrics |
+| `GET /skills` | Loaded Skills and parsing errors |
+| `GET /integrations/mcp` | Configured MCP connection and tool status |
+
+Metrics, traces and administrative endpoints follow the API access controls.
+Prometheus rules cover service availability, chat HTTP errors and latency.
+Notification delivery requires configuring a receiver; adding alert rules alone
+does not send messages. See [SaaS support configuration](docs/SAAS_SUPPORT.md).
+
+## Extending the runtime
+
+1. Add an intent and bilingual examples in `core/intent_recognizer.py`.
+2. Define an Agent profile and register its routing in `agents/agent_orchestrator.py`.
+3. Add a role Skill in `skills/<scenario>/SKILL.md`; changes refresh on the next request.
+4. Import verified product documents through `/knowledge/add` or `/knowledge/upload`.
+5. Register a validated local tool or configure an allowlisted MCP service.
+6. Add regression tests and evaluation cases for the scenario.
+
+The disabled [MCP examples](config/mcp_saas.example.json) cover accounts,
+subscriptions, tickets and documentation. Account services can require an
+application-supplied user context; the remote service must enforce membership
+and resource-level authorization. External operations remain disabled in the
+sample configuration until explicitly connected.
+
 ## Tests
 
 ```powershell
@@ -277,22 +251,36 @@ npm test
 npm run build
 ```
 
-`tests/test_saasbridge.py` covers bilingual classification, specialist routing,
-compound API/subscription requests, degraded-agent fallback, emergency handoff,
-mocked agent turns, skill loading, error codes and OpenAPI conversion.
+The latest verified implementation baseline, `020fb79`, passed **235 backend
+tests**, **14 frontend tests**, the frontend production build and Compose
+configuration validation. These checks use mocked model providers and local
+fixtures; they do not establish live-model answer quality or business-system
+readiness. Documentation changes do not alter that measured baseline.
 
-## Foundation boundaries
+Coverage includes routing and collaboration, tool validation, failure handling,
+request concurrency/idempotency, memory persistence, knowledge ingestion,
+Skill refresh, MCP boundaries and evaluation behavior. SaaS-specific cases are
+in `tests/test_saasbridge.py` and `tests/test_saas_extensions.py`.
 
-This is a backend foundation with the imported support console. The agents
-provide support guidance; they cannot change subscriptions, issue refunds,
-modify permissions, execute customer APIs or sign contracts. The added business
-error codes are example mappings to adapt to your actual product.
+## Current scope
 
-The inherited identity model is user-based, and the knowledge collection is
-shared. Do not load tenant-private documents or expose this as a production
-multi-tenant service until tenant-scoped storage, authorization and business
-integrations are implemented. Production authentication requires
-`ECHOMIND_ENV=production` and a valid `ECHOMIND_API_TOKENS` mapping.
+SaaSBridge provides the runtime foundation and support console. Local tools
+explain errors, validate supplied fields and perform limited calculations.
+Actual order lookups, refunds, subscription changes, account-permission updates
+and ticket creation require authorized business-system integrations. Human
+handoff currently produces a summary; it does not create a live ticket.
+
+The identity model is user-based and the local knowledge collection is shared.
+Tenant-private contracts and account records require tenant-scoped storage and
+authorization before a production multi-tenant deployment. Production API
+authentication requires `ECHOMIND_ENV=production` and a valid
+`ECHOMIND_API_TOKENS` mapping. Imported knowledge must be verified product
+documentation; generic error-code mappings and example policies are not evidence
+of a customer's actual account status.
+
+Keep credentials in the local `.env`; publish only the empty configuration
+template. Private reference archives, generated data and personal files are
+excluded from version control. Commit attribution uses the project identity.
 
 Source provenance: derived from the user-supplied Python EchoMind code. No new
 license is asserted for that upstream material.
