@@ -1,0 +1,33 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Illustrative SaaS API (not a live product)",
+    "version": "0.1.0",
+    "description": "Importer example only. Replace with your actual API specification."
+  },
+  "paths": {
+    "/example/items": {
+      "get": {
+        "summary": "Illustrative list operation",
+        "responses": {
+          "200": {
+            "description": "Illustrative response",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Item"}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Item": {
+        "type": "object",
+        "properties": {"id": {"type": "string"}}
+      }
+    }
+  }
+}

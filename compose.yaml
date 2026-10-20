@@ -1,0 +1,17 @@
+name: saasbridge
+services:
+  redis:
+    image: redis:7-alpine
+    ports: ["127.0.0.1:6379:6379"]
+    volumes: ["redis-data:/data"]
+    command: redis-server --appendonly yes
+  chromadb:
+    image: chromadb/chroma:0.5.23
+    ports: ["127.0.0.1:8001:8000"]
+    environment:
+      IS_PERSISTENT: "TRUE"
+      ANONYMIZED_TELEMETRY: "FALSE"
+    volumes: ["chroma-data:/chroma/chroma"]
+volumes:
+  redis-data:
+  chroma-data:

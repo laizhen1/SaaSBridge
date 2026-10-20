@@ -1,0 +1,55 @@
+# Merge with compose.yaml: docker compose -f compose.yaml -f compose.app.yaml up -d --build
+services:
+  redis:
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+  chromadb:
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/heartbeat', timeout=3).read()"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+  saasbridge:
+    build:
+      context: .
+      target: production
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      CHROMA_HOST: chromadb
+      CHROMA_PORT: "8000"
+      CHROMA_PERSIST_DIRECTORY: /app/data/chroma
+      EVAL_BASELINE_PATH: /app/data/eval/baseline.json
+      ECHOMIND_SKILLS_DIR: /app/skills
+    ports: ["127.0.0.1:8000:8000"]
+    volumes:
+      - app-data:/app/data
+      - ./skills:/app/skills:ro
+      - ./config/mcp_servers.json:/app/config/mcp_servers.json:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
+  frontend:
+    build: ./frontend
+    ports: ["127.0.0.1:5175:80"]
+    environment:
+      PYTHON_API_URL: /api/python
+    depends_on:
+      saasbridge:
+        condition: service_healthy
+  prometheus:
+    profiles: ["monitoring"]
+    image: prom/prometheus:latest
+    ports: ["127.0.0.1:9090:9090"]
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - saasbridge
+volumes:
+  app-data:
