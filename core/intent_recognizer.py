@@ -25,6 +25,7 @@ from anthropic import AsyncAnthropic
 from core.llm_client import create_client
 
 from core.llm_utils import extract_text_content
+from core.saas_support import SAAS_KEYWORDS, extract_saas_entities, keyword_matches, without_request_urls
 
 logger = logging.getLogger(__name__)
 
@@ -78,11 +79,11 @@ class IntentResult:
 
 # ── Few-shot 模板（同时用于 LLM 示例和 Embedding 匹配）────────────────────────
 _TEMPLATES: Dict[IntentCategory, List[str]] = {
-    IntentCategory.API_INTEGRATION: ['API integration returns 401', 'API 接口对接失败', 'webhook signature verification'],
-    IntentCategory.FEATURE_INQUIRY: ['Does the product support data export?', '支持哪些功能？', 'How does this feature work?'],
-    IntentCategory.ONBOARDING: ['How do I get started?', '新用户如何初始化配置？', 'Help with onboarding'],
-    IntentCategory.ENTERPRISE_MGMT: ['Change team permissions', '企业合同续费', 'Manage enterprise account roles'],
-    IntentCategory.SUBSCRIPTION: ['Cancel my subscription', '升级订阅套餐', 'Change my subscription plan'],
+    IntentCategory.API_INTEGRATION: ['API integration returns 401', 'API 接口对接失败', 'webhook signature verification', 'SDK returns INSUFFICIENT_SCOPE', '接口限流 429 如何退避重试？', 'How do I authenticate an OAuth request?'],
+    IntentCategory.FEATURE_INQUIRY: ['Does the product support data export?', '支持哪些功能？', 'How does this feature work?', 'Where are the release notes?', '最新版本支持单点登录功能吗？'],
+    IntentCategory.ONBOARDING: ['How do I get started?', '新用户如何初始化配置？', 'Help with onboarding', 'Guide me through initial setup', '首次使用工作区，需要配置哪些步骤？'],
+    IntentCategory.ENTERPRISE_MGMT: ['Change team permissions', '企业合同续费', 'Manage enterprise account roles', 'How do we invite members?', '团队权限和席位如何分配？', 'Who handles our contract renewal?'],
+    IntentCategory.SUBSCRIPTION: ['Cancel my subscription', '升级订阅套餐', 'Change my subscription plan', 'How do I disable auto-renew?', '按月订阅如何改为年付？', 'When does a downgrade take effect?'],
 
     IntentCategory.QUERY:      ["我的订单状态是什么？", "如何重置密码？", "快递什么时候到？"],
     IntentCategory.COMPLAINT:  ["等了好几个小时！", "服务太差了！", "一直没人处理！"],
@@ -342,11 +343,7 @@ class IntentRecognizer:
         """策略 3：关键词模式匹配（同步，零延迟兜底）。"""
         msg = message.lower()
         specific_patterns = {
-            IntentCategory.API_INTEGRATION: ['api', '接口', 'webhook', 'sdk', 'rate limit'],
-            IntentCategory.FEATURE_INQUIRY: ['feature', '功能', '支持哪些', 'data export'],
-            IntentCategory.ONBOARDING: ['onboarding', 'get started', '新用户', '初始化配置', '首次使用'],
-            IntentCategory.ENTERPRISE_MGMT: ['enterprise', 'team permissions', 'team roles', '企业', '团队权限', '合同续费'],
-            IntentCategory.SUBSCRIPTION: ['subscription', '订阅', '套餐', 'upgrade plan', 'cancel plan'],
+            **{IntentCategory(name): keywords for name, keywords in SAAS_KEYWORDS.items()},
 
             IntentCategory.HUMAN_HANDOFF: ["转人工", "人工客服", "找人工"],
             IntentCategory.ORDER_STATUS: ["订单状态", "发货了吗", "处理到哪", "order status"],
@@ -369,6 +366,9 @@ class IntentRecognizer:
             IntentCategory.ACCOUNT:    ["密码", "邮箱", "账户", "password"],
         }
 
+        # An explicit handoff remains authoritative, even in a detailed API question.
+        if any(keyword_matches(msg, kw) for kw in ("转人工", "人工客服", "找人工", "human agent", "human support")):
+            return {"intent": IntentCategory.HUMAN_HANDOFF, "confidence": 1.0}
         best_cat, best_score = self._best_pattern_match(msg, specific_patterns)
         if best_cat != IntentCategory.OTHER:
             return {"intent": best_cat, "confidence": best_score}
@@ -435,7 +435,9 @@ class IntentRecognizer:
     def _extract_entities(self, message: str) -> Dict[str, List[str]]:
         """用规则提取高价值实体，避免每次识别都额外调用 LLM。"""
         message = self._clean_text(message)
-        return {
+        saas_entities = extract_saas_entities(message)
+        message = without_request_urls(message)
+        entities = {
             "order_id": self._unique(re.findall(r"(?:订单号?|order(?:_id)?|#)\s*[:：#]?\s*([A-Za-z0-9_-]{4,32})", message, re.I)),
             "product": [],
             "date": self._unique(re.findall(r"(今天|明天|昨天|本周|这周|下周|\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}日?)", message)),
@@ -443,8 +445,12 @@ class IntentRecognizer:
             "error_code": self._unique(
                 re.findall(r"(?:error(?:_code)?|错误码|状态码|http)\s*[:：#]?\s*([45]\d{2})\b", message, re.I)
                 + re.findall(r"\b([45]\d{2})\b", message)
+                + re.findall(r"(?:error(?:[ _-]?code)?|错误码)\s*[:：#=]?\s*([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)\b", message)
+                + re.findall(r"\b(RATE_LIMIT_EXCEEDED|QUOTA_EXCEEDED|SUBSCRIPTION_INACTIVE|SEAT_LIMIT_REACHED|INSUFFICIENT_SCOPE|TENANT_ACCESS_DENIED|WEBHOOK_SIGNATURE_INVALID|IDEMPOTENCY_CONFLICT|API_VERSION_UNSUPPORTED|VALIDATION_ERROR)\b", message)
             ),
         }
+        entities.update(saas_entities)
+        return entities
 
     # ── 辅助 ──────────────────────────────────────────────────────────────────
 
@@ -504,7 +510,7 @@ class IntentRecognizer:
     ) -> tuple[IntentCategory, float]:
         best_cat, best_score = IntentCategory.OTHER, 0.0
         for cat, kws in patterns.items():
-            hits = sum(1 for kw in kws if kw in message)
+            hits = sum(1 for kw in kws if keyword_matches(message, kw))
             if not hits:
                 continue
             # 单个明确业务关键词就给可用置信度；多个关键词命中时提高置信度。

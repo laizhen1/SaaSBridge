@@ -1,0 +1,32 @@
+groups:
+  - name: saasbridge
+    rules:
+      - alert: SaaSBridgeUnavailable
+        expr: up{job="saasbridge-app"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: SaaSBridge metrics endpoint is unavailable
+          description: Check the app process, dependencies and scrape authentication.
+      - alert: SaaSBridgeChatHttpErrors
+        expr: >-
+          (sum(rate(chat_latency_ms_count{job="saasbridge-app",status=~"5.."}[5m]))
+          / sum(rate(chat_latency_ms_count{job="saasbridge-app"}[5m])) > 0.1)
+          and (sum(increase(chat_latency_ms_count{job="saasbridge-app"}[5m])) >= 20)
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Chat HTTP 5xx ratio exceeds 10 percent
+          description: At least 20 requests in five minutes; inspect traces for the cause.
+      - alert: SaaSBridgeSlowChat
+        expr: >-
+          (histogram_quantile(0.95, sum by (le) (rate(chat_latency_ms_bucket{job="saasbridge-app"}[5m]))) > 30000)
+          and (sum(increase(chat_latency_ms_count{job="saasbridge-app"}[5m])) >= 20)
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Chat p95 latency exceeds 30 seconds
+          description: Histogram units are milliseconds; inspect model and tool latency.

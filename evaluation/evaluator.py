@@ -701,6 +701,16 @@ class EndToEndEvaluator:
 # ── 内置测试用例（开箱即用）──────────────────────────────────────────────────
 
 DEFAULT_INTENT_CASES: List[IntentTestCase] = [
+    IntentTestCase("API 接口返回 INSUFFICIENT_SCOPE", "api_integration"),
+    IntentTestCase("How do I verify a webhook signature?", "api_integration"),
+    IntentTestCase("产品支持哪些功能？", "feature_inquiry"),
+    IntentTestCase("Where are the release notes?", "feature_inquiry"),
+    IntentTestCase("新用户如何初始化配置？", "onboarding"),
+    IntentTestCase("Guide me through initial setup", "onboarding"),
+    IntentTestCase("企业合同续签流程是什么？", "enterprise_mgmt"),
+    IntentTestCase("How do I change team permissions?", "enterprise_mgmt"),
+    IntentTestCase("如何取消订阅自动续费？", "subscription"),
+    IntentTestCase("Can I downgrade my subscription?", "subscription"),
     IntentTestCase("我的订单什么时候到？",       "logistics"),
     IntentTestCase("帮我取消订单",               "request"),
     IntentTestCase("你们服务太差了！",            "complaint"),
@@ -715,6 +725,18 @@ DEFAULT_INTENT_CASES: List[IntentTestCase] = [
 ]
 
 DEFAULT_DIALOG_CASES: List[Dict[str, Any]] = [
+    {"question": "API 返回 INSUFFICIENT_SCOPE，request_id: req_demo，怎么排查？", "expected_agent": "api",
+     "reference_answer": "解释 scope 不足的可能原因，检索对应版本文档，核对请求路径和最小必要权限；不索要完整密钥或声称已查日志。",
+     "evidence": "lookup_error_code 提供通用 scope 排查建议，不执行真实账户授权或日志查询。"},
+    {"question": "新用户如何初始化配置？", "expected_agent": "onboarding",
+     "reference_answer": "确认目标和当前步骤，依据已有文档给出可验证的引导；文档不足时说明缺口，不编造 UI 路径。",
+     "evidence": "OnboardingAgent 使用知识库中的真实功能文档和发布日志，不承诺未证实的能力。"},
+    {"question": "tenant_id: org_demo，如何修改团队权限并续签企业合同？", "expected_agent": "enterprise",
+     "reference_answer": "说明需查询角色与合同政策，组织 ID 不等于管理员授权；权限变更和签署需要业务系统核验或人工处理。",
+     "evidence": "外部业务连接默认关闭，EnterpriseAgent 不能直接修改团队角色或签署合同。"},
+    {"question": "How do I cancel my subscription?", "expected_agent": "billing",
+     "reference_answer": "Reply in English, explain that cancellation rules require product documentation, and distinguish instructions from a completed cancellation. Do not require an order amount for a general policy question.",
+     "evidence": "Local billing tools only check supplied fields and compare amounts. No subscription mutation is connected by default."},
     {"question": "我的订单 #12345 还没到，已经超时了", "expected_agent": "general",
      "reference_answer": "记录订单号并说明需要查询真实物流系统，不编造物流状态。",
      "evidence": "当前本地工具无法查询真实订单或物流。"},

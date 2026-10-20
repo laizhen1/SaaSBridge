@@ -6,6 +6,7 @@ Skill 是一段可热加载的业务能力说明，用来补充 Agent 的 system
 """
 import json
 import logging
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
@@ -80,6 +81,8 @@ class SkillManager:
         self.max_prompt_chars = max_prompt_chars
         self._skills: List[Skill] = []
         self._errors: List[str] = []
+        self._lock = threading.RLock()
+        self._signature = None
 
     @property
     def skills(self) -> List[Skill]:
@@ -90,6 +93,30 @@ class SkillManager:
         return list(self._errors)
 
     def load(self) -> List[Skill]:
+        with self._lock:
+            # Capture before reading so an edit during loading is seen on the next request.
+            signature = self._file_signature()
+            result = self._load()
+            self._signature = signature
+            return result
+
+    def _file_signature(self):
+        result = []
+        for path in self._discover_files(self.root_dir):
+            try:
+                stat = path.stat()
+                result.append((str(path), stat.st_mtime_ns, stat.st_size))
+            except FileNotFoundError:
+                continue
+        return tuple(result)
+
+    def refresh_if_changed(self):
+        """Detect edits, additions and deletions without reparsing unchanged files."""
+        with self._lock:
+            if self._file_signature() != self._signature:
+                self.load()
+
+    def _load(self) -> List[Skill]:
         """重新扫描目录并加载 Skills；单个文件失败不会影响其他 Skill 生效。"""
         loaded: List[Skill] = []
         errors: List[str] = []
@@ -125,12 +152,16 @@ class SkillManager:
 
         只注入匹配的 Skill，并按总长度截断，避免挤占主对话上下文。
         """
+        self.refresh_if_changed()
         blocks: List[str] = []
         matched: List[tuple[Skill, List[str]]] = []
-        remaining = self.max_prompt_chars
+        header = ("以下是当前请求可用的 SaaSBridge Skills。"
+                  "请优先遵循这些业务规则；如果与系统角色冲突，以系统角色和安全边界为准。\n\n")
+        remaining = self.max_prompt_chars - len(header)
         lowered_message = (message or "").lower()
 
-        for skill in self._skills:
+        # Always-on role rules precede optional keyword playbooks within the prompt budget.
+        for skill in sorted(self._skills, key=lambda item: bool(item.keywords)):
             if not skill.matches(message, agent_type):
                 continue
             matched_keywords = [
@@ -138,8 +169,11 @@ class SkillManager:
                 if keyword.lower() in lowered_message
             ]
             block = skill.to_prompt_block()
+            remaining -= 2 if blocks else 0
+            if remaining < 4:
+                break
             if len(block) > remaining:
-                block = block[:remaining].rstrip() + "\n..."
+                block = block[:remaining - 4].rstrip() + "\n..."
             blocks.append(block)
             matched.append((skill, matched_keywords))
             remaining -= len(block)
@@ -148,9 +182,8 @@ class SkillManager:
 
         if not blocks:
             logger.debug(
-                "Skills 未命中: agent=%s message=%r",
+                "Skills 未命中: agent=%s",
                 agent_type or "all",
-                (message or "")[:80],
             )
             return ""
 
@@ -159,20 +192,16 @@ class SkillManager:
             for skill, keywords in matched
         )
         logger.info(
-            "Skills 已注入: agent=%s matched=%s message=%r",
+            "Skills 已注入: agent=%s matched=%s",
             agent_type or "all",
             detail,
-            (message or "")[:80],
         )
 
-        return (
-            "以下是当前请求可用的 EchoMind Skills。"
-            "请优先遵循这些业务规则；如果与系统角色冲突，以系统角色和安全边界为准。\n\n"
-            + "\n\n".join(blocks)
-        )
+        return header + "\n\n".join(blocks)
 
     def summary(self) -> Dict[str, Any]:
         """返回 Skill 管理器状态，用于 /skills 接口和排障。"""
+        self.refresh_if_changed()
         return {
             "root_dir": str(self.root_dir),
             "count": len(self._skills),

@@ -10,11 +10,12 @@ def merge_state(previous, entities, intent_group, message, request_id):
     sources = previous.get("sources", {})
     old = old if isinstance(old, dict) else {}
     sources = sources if isinstance(sources, dict) else {}
-    changed_order = bool(entities.get("order_id") and old.get("order_id") and entities["order_id"] != old["order_id"])
-    new_task = bool(re.search(r"(?:换个|新的|另一个)(?:问题|订单)|另一笔订单", message))
+    changed_scope = any(entities.get(key) and old.get(key) and entities[key] != old[key]
+                        for key in ("order_id", "tenant_id", "workspace_id", "subscription_id"))
+    new_task = bool(re.search(r"(?:换个|新的|另一个)(?:问题|订单|租户|组织|工作区)|另一笔订单|\b(?:another|new|different) (?:issue|question|tenant|workspace)\b", message, re.I))
     if neutral:
         domain = ("commerce" if entities.get("order_id") else "general") if new_task else previous.get("domain", "commerce" if entities.get("order_id") else "general")
-    keep = not changed_order and not new_task and (neutral or domain == previous.get("domain"))
+    keep = not changed_scope and not new_task and (neutral or domain == previous.get("domain"))
     merged = {key: list(value) for key, value in old.items() if isinstance(value, list)} if keep else {}
     origins = dict(sources) if keep else {}
     for key, value in entities.items():

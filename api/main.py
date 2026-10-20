@@ -503,14 +503,17 @@ async def search(query: str = Query(min_length=1, max_length=2000), top_k: int =
 
 class DocInput(BaseModel):
     """单篇文档输入。"""
-    title:   str
-    content: str
-    document_id: Optional[str] = None
+    title: str = Field(min_length=1, max_length=1000)
+    content: str = Field(min_length=1, max_length=10 * 1024 * 1024)
+    document_id: Optional[str] = Field(default=None, min_length=1, max_length=2000)
+    doc_type: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    source: Optional[str] = Field(default=None, min_length=1, max_length=1000)
+    product_version: Optional[str] = Field(default=None, min_length=1, max_length=128)
 
 
 class BatchDocInput(BaseModel):
     """批量文档导入请求体。"""
-    documents: List[DocInput]
+    documents: List[DocInput] = Field(min_length=1, max_length=10000)
 
 
 class EvalIntentInput(BaseModel):
@@ -580,7 +583,8 @@ async def upload_knowledge(file: UploadFile = File(...)):
 
     支持格式：
     - `.txt` / `.md`：整个文件作为一篇文档，文件名作为标题
-    - `.json`：JSON 数组格式 `[{"title": "...", "content": "..."}, ...]`
+    - `.json`：文档数组、documents 对象或 OpenAPI 3.0/3.1
+    - `.yaml` / `.yml`：OpenAPI 3.0/3.1（仅本地引用，不支持 YAML alias）
 
     文件大小限制：10MB
     """
@@ -589,31 +593,26 @@ async def upload_knowledge(file: UploadFile = File(...)):
         raise HTTPException(503, "知识库未初始化")
     kb = tool.handler.__self__
 
-    filename = file.filename or "unknown"
-    if pathlib.Path(filename).suffix.lower() not in {".txt", ".md", ".json"}:
-        raise HTTPException(400, "仅支持 .txt、.md、.json 文件")
+    from tooling.openapi_import import knowledge_documents
+    filename = (file.filename or "unknown").replace("\\", "/").rsplit("/", 1)[-1]
+    if pathlib.Path(filename).suffix.lower() not in {".txt", ".md", ".json", ".yaml", ".yml"}:
+        raise HTTPException(400, "仅支持 .txt、.md、.json、.yaml、.yml 文件")
     content = await file.read(10 * 1024 * 1024 + 1)
     if len(content) > 10 * 1024 * 1024:
         raise HTTPException(413, "文件大小超过 10MB 限制")
 
-    text = content.decode("utf-8", errors="ignore")
-    filename = file.filename or "unknown"
-
-    if filename.lower().endswith(".json"):
-        import json as _json
-        try:
-            docs = _json.loads(text)
-            if not isinstance(docs, list):
-                raise HTTPException(400, "JSON 文件应为数组格式: [{title, content}, ...]")
-        except _json.JSONDecodeError as e:
-            raise HTTPException(400, f"JSON 解析失败: {e}")
-    else:
-        # txt / md：整个文件作为一篇文档
-        title = filename.rsplit(".", 1)[0] if "." in filename else filename
-        docs = [{"title": title, "content": text}]
+    try:
+        text = content.decode("utf-8-sig")
+    except UnicodeDecodeError as ex:
+        raise HTTPException(400, "文件必须使用 UTF-8 编码") from ex
+    try:
+        docs = knowledge_documents(text, filename)
+    except ValueError as ex:
+        raise HTTPException(400, str(ex)) from ex
 
     try:
-        validated = [DocInput.model_validate(doc).model_dump(exclude_none=True) for doc in docs]
+        batch = BatchDocInput.model_validate({"documents": docs})
+        validated = [doc.model_dump(exclude_none=True) for doc in batch.documents]
         count = await kb.add_documents_async(validated)
     except ValueError as ex:
         raise HTTPException(400, "文档格式不正确：需要非空 title、content 和可选 document_id") from ex
@@ -625,6 +624,7 @@ async def upload_knowledge(file: UploadFile = File(...)):
     return {
         "message": f"文件 {filename} 导入成功",
         "added_chunks": count,
+        "imported_documents": len(validated),
         "total_chunks": total,
     }
 

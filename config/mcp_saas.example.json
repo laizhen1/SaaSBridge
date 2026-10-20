@@ -1,0 +1,54 @@
+{
+  "servers": [
+    {
+      "name": "saas_accounts",
+      "enabled": false,
+      "transport": "streamable_http",
+      "url": "https://support-api.example.com/mcp",
+      "headers_env": {"Authorization": "SAAS_MCP_AUTHORIZATION"},
+      "allowed_tools": ["get_account", "list_team_roles", "get_contract"],
+      "agents": ["enterprise"],
+      "read_only": true,
+      "require_user_context": true,
+      "cache_ttl": 0,
+      "timeout_s": 15
+    },
+    {
+      "name": "saas_subscriptions",
+      "enabled": false,
+      "transport": "streamable_http",
+      "url": "https://support-api.example.com/mcp",
+      "headers_env": {"Authorization": "SAAS_MCP_AUTHORIZATION"},
+      "allowed_tools": ["get_subscription", "get_invoice"],
+      "agents": ["billing"],
+      "read_only": true,
+      "require_user_context": true,
+      "cache_ttl": 0,
+      "timeout_s": 15
+    },
+    {
+      "name": "saas_tickets",
+      "enabled": false,
+      "transport": "streamable_http",
+      "url": "https://support-api.example.com/mcp",
+      "headers_env": {"Authorization": "SAAS_MCP_AUTHORIZATION"},
+      "allowed_tools": ["get_ticket"],
+      "agents": ["api", "onboarding", "enterprise", "billing"],
+      "read_only": true,
+      "require_user_context": true,
+      "cache_ttl": 0,
+      "timeout_s": 15
+    },
+    {
+      "name": "saas_docs",
+      "enabled": false,
+      "transport": "streamable_http",
+      "url": "https://docs-api.example.com/mcp",
+      "allowed_tools": ["search_api_docs", "search_release_notes"],
+      "agents": ["api", "onboarding"],
+      "read_only": true,
+      "cache_ttl": 300,
+      "timeout_s": 15
+    }
+  ]
+}

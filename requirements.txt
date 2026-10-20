@@ -26,6 +26,7 @@ httpx==0.28.1              # monitor/performance_monitor.py webhook 告警
 
 # ── 工具 ──────────────────────────────────────────────────────────────────────
 python-dotenv==1.0.1
+PyYAML==6.0.3             # Safe, local OpenAPI YAML import
 
 # 标准 Model Context Protocol SDK（客户端和服务端）
 mcp==1.26.0

@@ -1,0 +1,36 @@
+{
+  "documents": [
+    {
+      "document_id": "template:release-notes",
+      "title": "待填写：产品发布日志",
+      "doc_type": "release_notes",
+      "source": "待填写：实际发布日志地址",
+      "product_version": "待填写",
+      "content": "模板，请替换后导入。填写版本、发布日期、已发布功能、已弃用接口、兼容性影响、迁移步骤和适用套餐。区分计划中的功能与已上线功能。"
+    },
+    {
+      "document_id": "template:integration-faq",
+      "title": "待填写：常见集成问题",
+      "doc_type": "integration_faq",
+      "source": "待填写：实际集成指南地址",
+      "product_version": "待填写",
+      "content": "模板，请替换后导入。按问题填写症状、适用版本、错误码的正式定义、可能原因、去敏请求示例、验证步骤及升级条件；涵盖认证 scope、限流退避、幂等、回调签名和环境配置。"
+    },
+    {
+      "document_id": "template:features-and-roles",
+      "title": "待填写：功能配置与角色权限",
+      "doc_type": "feature_guide",
+      "source": "待填写：实际功能指南地址",
+      "product_version": "待填写",
+      "content": "模板，请替换后导入。填写初始化配置步骤与成功标志、真实功能名称和 UI 位置、套餐适用条件、团队角色矩阵、邀请与席位分配流程、管理员要求。"
+    },
+    {
+      "document_id": "template:subscription-policy",
+      "title": "待填写：订阅管理规则",
+      "doc_type": "subscription_policy",
+      "source": "待填写：实际订阅政策地址",
+      "product_version": "待填写",
+      "content": "模板，请替换后导入。填写账期、标准套餐与企业合同的区别、升级/降级生效时间、按比例计费规则、取消自动续费流程、退款审核边界和人工渠道。不得将模板当作产品实际承诺。"
+    }
+  ]
+}

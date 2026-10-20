@@ -35,7 +35,7 @@ enabled: true
 - `name`：Skill 展示名称，会出现在注入给模型的 prompt 中。
 - `description`：简短说明，方便 `/skills` 接口排查。
 - `keywords`：触发关键词，用户消息命中后才注入；多个关键词用英文逗号或中文逗号分隔均可。
-- `agents`：适用 Agent，可填 `general`、`technical`、`billing`，多个值用逗号分隔。
+- `agents`：适用 Agent，可填 `general`、`technical`、`billing`、`api`、`onboarding`、`enterprise`、`escalation`，多个值用逗号分隔。
 - `enabled`：是否启用，支持 `true/false`。
 
 ## 编写要求
@@ -49,7 +49,11 @@ enabled: true
 
 ## 热加载
 
-修改 Skill 文件后，不需要重启服务，调用：
+新增、修改或删除 Skill 文件后，下一次请求会检查文件时间和大小并自动重新加载，无需重启服务。未变化的文件不重复解析。解析失败的文件会被排除，错误可在 `/skills` 查看。
+
+常驻角色规则（无 keywords）优先于按关键词匹配的流程注入，整个 Skill prompt 受 `ECHOMIND_SKILLS_MAX_PROMPT_CHARS` 限制，默认 5000 字符。
+
+也可手动强制重载（启用认证时需要管理员身份）：
 
 ```bash
 curl -X POST http://localhost:8000/skills/reload

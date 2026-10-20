@@ -91,6 +91,14 @@ class MemoryManager:
     HISTORY_TOP_K = 5     # 情景记忆检索返回条数
     SUMMARY_MAX_CHARS = 800
     PROFILE_DOC_PREFIX = "user_profile:"
+    working_ttl = 86400
+
+    @staticmethod
+    def configured_working_ttl():
+        value = int(os.getenv("ECHOMIND_WORKING_MEMORY_TTL_SECONDS", "86400"))
+        if not 3600 <= value <= 604800:
+            raise ValueError("ECHOMIND_WORKING_MEMORY_TTL_SECONDS 必须在 3600–604800 之间")
+        return value
 
     def __init__(
         self,
@@ -102,6 +110,7 @@ class MemoryManager:
         base_url:     Optional[str] = None,
         model:        str = "claude-3-5-sonnet-20241022",
     ):
+        self.working_ttl = self.configured_working_ttl()
         kwargs: Dict[str, Any] = {"api_key": api_key}
         if base_url:
             kwargs["base_url"] = base_url
@@ -166,9 +175,10 @@ class MemoryManager:
         async with self._redis.pipeline(transaction=True) as pipe:
             if response.get("status") != "failed":
                 pipe.lpush(key, raw("user", message), raw("assistant", response["response"]))
-                pipe.expire(key, 86400)
+                pipe.expire(key, self.working_ttl)
+                pipe.expire(self._summary_key(user_id, conv_id), self.working_ttl)
                 if state is not None:
-                    pipe.setex(self._state_key(user_id, conv_id), 86400, json.dumps(state))
+                    pipe.setex(self._state_key(user_id, conv_id), self.working_ttl, json.dumps(state))
             pipe.setex(self.receipt_key(user_id, conv_id, request_id), 86400,
                         json.dumps({"message": message, "response": response}))
             if trace:
@@ -221,7 +231,7 @@ class MemoryManager:
             "ts":        msg.timestamp.isoformat(),
             "metadata":  msg.metadata,
         }))
-        await self._redis.expire(key, 86400)  # 24h TTL
+        await self._redis.expire(key, self.working_ttl)
 
         # 超过压缩阈值时触发压缩
         if await self._redis.llen(key) >= self.COMPRESS_AT:
@@ -370,9 +380,9 @@ class MemoryManager:
                         return  # 其他压缩任务已更新快照，不再覆盖它。
                     keep_count = len(current) - len(snapshot) + 5
                     pipe.multi()
-                    pipe.setex(skey, 86400, new_summary)
+                    pipe.setex(skey, self.working_ttl, new_summary)
                     pipe.ltrim(key, 0, keep_count - 1)
-                    pipe.expire(key, 86400)
+                    pipe.expire(key, self.working_ttl)
                     await pipe.execute()
                     logger.info("工作记忆压缩完成: %s/%s", user_id, conv_id)
                     await self._store_episodic(user_id, conv_id, text, summary)

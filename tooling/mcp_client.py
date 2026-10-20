@@ -36,6 +36,7 @@ class MCPServerConfig:
     headers_env: Dict[str, str] = field(default_factory=dict)
     env_vars: List[str] = field(default_factory=list)
     read_only: bool = True
+    require_user_context: bool = False
     timeout_s: float = 25
     cache_ttl: float = 300
     max_result_chars: int = 12000
@@ -47,8 +48,10 @@ class MCPServerConfig:
             raise ValueError("MCP 仅支持 streamable_http 或 stdio")
         if not self.allowed_tools or not all(isinstance(n, str) and n for n in self.allowed_tools):
             raise ValueError("必须显式配置 MCP allowed_tools 白名单")
-        if not self.agents or not set(self.agents) <= {"general", "technical", "billing", "escalation"}:
+        if not self.agents or not set(self.agents) <= {"general", "technical", "billing", "escalation", "api", "onboarding", "enterprise"}:
             raise ValueError("MCP agents 必须是有效 Agent 类型")
+        if type(self.read_only) is not bool or type(self.require_user_context) is not bool:
+            raise ValueError("MCP read_only 和 require_user_context 必须是布尔值")
         if self.transport == "streamable_http":
             url = urlsplit(self.url)
             if url.scheme not in {"http", "https"} or not url.hostname or url.username or url.password:
@@ -249,7 +252,7 @@ class StandardMCPClient:
             self._origins[alias] = (config.name, remote.name)
 
             async def handler(params, context, server=config.name, name=remote.name):
-                return await self._call_remote(server, name, params)
+                return await self._call_remote(server, name, params, context)
 
             self.manager.register(Tool(name=alias, description=remote.description or remote.name,
                                        handler=handler, schema=remote.inputSchema,
@@ -277,12 +280,21 @@ class StandardMCPClient:
         if self._on_change:
             self._on_change()
 
-    async def _call_remote(self, server, name, arguments):
+    async def _call_remote(self, server, name, arguments, context=None):
         connection = self.connections[server]
+        meta = None
+        if connection.config.require_user_context:
+            user_id = (context or {}).get("user_id")
+            if not isinstance(user_id, str) or not user_id.strip():
+                raise MCPRemoteError("MCP 业务查询需要用户上下文")
+            # Supplied by the application, never by the model's tool arguments.
+            # The remote service must authenticate this gateway and enforce membership.
+            meta = {"saasbridge/user_id": user_id}
         if connection.session is None:
             raise MCPRemoteError(f"MCP 服务 {server} 未连接")
         try:
-            result = await connection.session.call_tool(name, arguments)
+            kwargs = {"meta": meta} if meta else {}
+            result = await connection.session.call_tool(name, arguments, **kwargs)
         except Exception:
             connection.reconnect.set()
             raise

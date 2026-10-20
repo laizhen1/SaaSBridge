@@ -275,10 +275,10 @@
                 <label class="upload-button" :class="{ disabled: busy }">
                   <AppIcon name="upload" />
                   上传文件
-                  <input :disabled="busy" type="file" accept=".txt,.md,.json" @change="performAction('upload', handleUpload, $event)" />
+                  <input :disabled="busy" type="file" accept=".txt,.md,.json,.yaml,.yml" @change="performAction('upload', handleUpload, $event)" />
                 </label>
               </div>
-              <p class="form-hint">支持 TXT、Markdown、JSON，最大 10 MB。</p>
+              <p class="form-hint">支持 TXT、Markdown、JSON 文档与 OpenAPI 3.0/3.1（JSON / YAML），最大 10 MB。</p>
             </form>
           </section>
         </div>

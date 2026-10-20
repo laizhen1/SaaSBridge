@@ -74,7 +74,7 @@ class KnowledgeBase:
         )
 
         # 如果知识库为空，导入默认文档
-        seed_demo = os.getenv("ECHOMIND_SEED_DEMO_DOCS", "true").lower() in {"1", "true", "yes"}
+        seed_demo = os.getenv("ECHOMIND_SEED_DEMO_DOCS", "false").lower() in {"1", "true", "yes"}
         if os.getenv("ECHOMIND_ENV", "development").lower() != "production" and seed_demo and self._collection.count() == 0:
             self._load_default_docs()
 
@@ -101,11 +101,18 @@ class KnowledgeBase:
             identity = json.dumps(["explicit", explicit_id] if explicit_id else ["title", title], ensure_ascii=True)
             if not isinstance(identity, str):
                 raise ValueError("document_id 必须是字符串")
-            prepared[identity] = (title, content, bool(doc.get("document_id")))
+            metadata = {}
+            for key, limit in (("doc_type", 64), ("source", 1000), ("product_version", 128)):
+                value = doc.get(key)
+                if value is not None:
+                    if not isinstance(value, str) or not value.strip() or len(value) > limit:
+                        raise ValueError(f"Invalid document metadata: {key}")
+                    metadata[key] = value
+            prepared[identity] = (title, content, bool(doc.get("document_id")), metadata)
 
         count = 0
         with self._write_lock:
-            for identity, (title, content, explicit) in prepared.items():
+            for identity, (title, content, explicit, metadata) in prepared.items():
                 document_id = hashlib.sha256(identity.encode()).hexdigest()
                 chunks = self._chunk_text(content, chunk_size=500)
                 version = hashlib.sha256(content.encode()).hexdigest()
@@ -127,7 +134,7 @@ class KnowledgeBase:
                                    if not (meta or {}).get("document_id"))
                 self._collection.upsert(ids=ids, documents=chunks, metadatas=[
                     {"title": title, "document_id": document_id, "version": version,
-                     "chunk_index": i, "total_chunks": len(chunks)} for i in range(len(chunks))
+                     "chunk_index": i, "total_chunks": len(chunks), **metadata} for i in range(len(chunks))
                 ])
                 stale = old_ids - set(ids)
                 if stale:
@@ -170,6 +177,7 @@ class KnowledgeBase:
                     "chunk":    meta.get("chunk_index", 0),
                     "document_id": meta.get("document_id", ""),
                     "version": meta.get("version", ""),
+                    **{key: meta[key] for key in ("doc_type", "source", "product_version") if key in meta},
                 })
 
         return items
@@ -205,30 +213,22 @@ class KnowledgeBase:
     # ── 内部方法 ──────────────────────────────────────────────────────────────
 
     def _chunk_text(self, text: str, chunk_size: int = 500) -> List[str]:
-        """将长文本按 chunk_size 切片，保留语义完整性（按句号/换行切分）。"""
+        """Prefer line boundaries without rewriting JSON, Markdown or code examples."""
+        if chunk_size <= 0:
+            raise ValueError("chunk_size must be positive")
         if len(text) <= chunk_size:
             return [text] if text.strip() else []
 
         chunks = []
-        current = ""
-        # 按句子切分
-        sentences = text.replace("\n", "。").split("。")
-        sentences = [sent[i:i + chunk_size] for sent in sentences
-                     for i in range(0, len(sent), chunk_size)]
-        for sent in sentences:
-            sent = sent.strip()
-            if not sent:
-                continue
-            if len(current) + len(sent) + 1 > chunk_size:
-                if current:
-                    chunks.append(current)
-                current = sent
-            else:
-                current = f"{current}。{sent}" if current else sent
-
-        if current:
-            chunks.append(current)
-
+        start = 0
+        while start < len(text):
+            end = min(start + chunk_size, len(text))
+            if end < len(text):
+                boundary = max(text.rfind("\n", start, end), text.rfind("。", start, end)) + 1
+                if boundary > start + chunk_size // 2:
+                    end = boundary
+            chunks.append(text[start:end])
+            start = end
         return chunks
 
     def _load_default_docs(self) -> None:

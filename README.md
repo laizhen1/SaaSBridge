@@ -236,25 +236,37 @@ Use the root Compose files for the SaaSBridge deployment.
 Supply your actual API documentation, feature release notes and integration FAQs.
 No product capabilities, prices or contracts have been invented.
 
-Convert an OpenAPI **3.x JSON** file into the existing knowledge API format:
+Upload an **OpenAPI 3.0/3.1 JSON or YAML** file from the knowledge panel or
+`POST /knowledge/upload`. The console now accepts `.yaml` and `.yml` too.
+Alternatively, convert a local spec into the existing knowledge API format:
 
 ```powershell
 .\.venv\Scripts\python.exe -m tooling.openapi_import .\your-openapi.json .\data\openapi-documents.json
 Invoke-RestMethod http://127.0.0.1:8000/knowledge/add -Method Post -ContentType 'application/json' -InFile .\data\openapi-documents.json
 ```
 
-The converter includes operations, inherited authentication, path parameters and
-component definitions. Local references are validated and preserved; external
-references and path-item references must be resolved before import. YAML and
-Swagger 2.0 require prior conversion. Review documents for secrets before ingestion.
+The converter includes operations, inherited authentication and server URLs, path
+parameters and component definitions. Local path-item references are resolved;
+other local references are validated and retained with component documents.
+External references, YAML aliases and Swagger 2.0 require prior conversion.
+Review documents for secrets before ingestion.
 Import only trusted product documentation. The existing API limits apply to each
 batch; split large payloads if necessary.
 
 Other documentation uses the same endpoint:
 
 ```json
-{"documents":[{"title":"Product release notes","content":"Your actual release notes here."}]}
+{"documents":[{"title":"Product release notes","content":"Your actual release notes here.","doc_type":"release_notes","source":"release-notes.md","product_version":"1.0"}]}
 ```
+
+Document metadata is retained in search results. Reimporting the same OpenAPI
+product/version/operation updates its chunks. Removed operations are not deleted
+automatically; review obsolete documents before importing a replacement spec.
+
+See [SaaS support configuration](docs/SAAS_SUPPORT.md) for the intent/agent map,
+automatic Skill refresh, disabled external-system templates, working-memory TTL
+and Prometheus alerts. Knowledge templates for release notes and integration
+FAQs are in `examples/saas-knowledge.template.json`; replace placeholders before import.
 
 ## Tests
 

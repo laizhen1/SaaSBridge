@@ -86,10 +86,24 @@ def suggest_required_fields(req: Request, args: Dict[str, Any]) -> Dict[str, Any
         fields = ["事件时间", "期望处理方式"]
     elif intent == "other":
         fields = ["希望解决的具体问题"]
+    saas_fields = {
+        "api_integration": {"endpoint": "请求方法与接口路径（去掉凭据和查询串）", "api_version": "API 版本", "error_code": "错误码", "request_id": "请求追踪 ID"},
+        "enterprise_mgmt": {"tenant_id": "组织 ID（仅用于定位，不作为授权）", "contract_id": "仅合同问题需要合同编号"},
+        "subscription": {"subscription_id": "仅账户查询需要订阅 ID"},
+        "onboarding": {},
+        "feature_inquiry": {},
+    }
+    if intent in saas_fields:
+        fields = [label for key, label in saas_fields[intent].items() if not req.entities.get(key)]
+        if intent == "onboarding":
+            fields = ["希望完成的目标和当前配置步骤"]
+        elif intent == "feature_inquiry":
+            fields = ["具体功能和正在使用的产品版本"]
     return {
         "intent": intent,
         "required_fields": fields,
         "known_entities": req.entities or {},
+        "guidance": "仅询问当前问题缺少的必要字段；通用功能或政策咨询不需要账户标识。字段齐全不代表已授权。",
     }
 
 
@@ -103,6 +117,13 @@ def lookup_error_code(req: Request, args: Dict[str, Any]) -> Dict[str, Any]:
         "SEAT_LIMIT_REACHED": ("席位数量已达上限", ["核对已使用席位", "由管理员确认增购流程"]),
         "INSUFFICIENT_SCOPE": ("访问范围不足", ["核对文档所需 scope", "由管理员按最小权限授权"]),
         "TENANT_ACCESS_DENIED": ("组织访问被拒绝", ["核对组织上下文", "联系本组织管理员"]),
+        "WEBHOOK_SIGNATURE_INVALID": ("回调签名校验失败", ["按文档核对原始请求体与签名算法", "检查时间戳允许偏差，不要发送签名密钥"]),
+        "IDEMPOTENCY_CONFLICT": ("幂等键与原请求不一致", ["核对原请求结果与请求体", "不要为支付或写操作盲目换键重试"]),
+        "API_VERSION_UNSUPPORTED": ("接口版本不受支持", ["核对 API 版本与发布日志", "按迁移文档验证兼容性"]),
+        "VALIDATION_ERROR": ("请求字段校验失败", ["按 OpenAPI 核对必填字段、类型和枚举", "提供去除凭据的最小请求样例"]),
+        "409": ("资源状态冲突", ["核对资源当前版本和幂等键", "先查询结果再决定是否重试写入"]),
+        "422": ("请求语义或字段校验失败", ["核对请求体与 OpenAPI schema", "检查错误响应中的字段路径"]),
+        "503": ("服务暂时不可用", ["查看服务状态与 Retry-After", "只对安全或有幂等保护的请求有限重试"]),
         "429": ("请求频率超限", ["遵循 Retry-After", "检查配额和并发"]),
         "401": ("认证失败", ["确认 Token/API Key 是否过期", "确认请求时间戳和签名", "确认账号登录状态"]),
         "403": ("权限不足", ["确认账号或套餐权限", "确认资源权限和 IP 白名单"]),
@@ -118,6 +139,9 @@ def lookup_error_code(req: Request, args: Dict[str, Any]) -> Dict[str, Any]:
         "meaning": meaning,
         "next_steps": steps,
         "server_log_checked": False,
+        "known_code": code in mapping,
+        "source": "generic_support_catalog",
+        "guidance": "通用排查方向；业务错误码以当前产品文档为准，未查询账户、配额或订阅实际状态。",
     }
 
 
@@ -132,6 +156,10 @@ def build_diagnostic_plan(req: Request, args: Dict[str, Any]) -> Dict[str, Any]:
     ]
     if reproduced:
         steps.append("用最小请求复现并记录 request_id")
+    if req.intent and req.intent.value == "api_integration":
+        steps = ["检索对应版本的接口文档与发布日志", "核对请求方法、路径、必填字段与认证 scope",
+                 "核对错误码、request_id 和发生时间", "在测试环境使用去除密钥的最小请求复现",
+                 "仅对安全请求或有幂等保护的操作，按文档有限重试"]
     return {
         "environment": environment,
         "reproduced": reproduced,
@@ -147,11 +175,14 @@ def check_billing_fields(req: Request, args: Dict[str, Any]) -> Dict[str, Any]:
         "date": bool(req.entities.get("date")),
         "payment_channel": bool(args.get("payment_channel")),
     }
+    if req.intent and req.intent.value == "subscription":
+        fields = {name: bool(req.entities.get(name)) for name in ("tenant_id", "subscription_id")}
     return {
         "fields": fields,
         "missing_fields": [name for name, present in fields.items() if not present],
         "can_confirm_refund": False,
         "reason": "当前工具只做字段检查，不连接订单或支付系统",
+        "required_for": "仅账户具体账单/订阅核验；通用套餐、取消或续费规则应先查文档，无需收集付款信息。",
     }
 
 
@@ -251,8 +282,8 @@ def technical_tools() -> Dict[str, AgentToolSpec]:
     return {
         "lookup_error_code": make_tool(
             "lookup_error_code",
-            "解释常见 HTTP 错误码的可能含义和低风险排查方向；不会读取服务端日志。",
-            {"error_code": {"type": "string", "description": "例如 401、403、500"}},
+            "解释 HTTP 与 SaaS 业务错误码的可能含义和低风险排查方向；不会读取服务端日志。",
+            {"error_code": {"type": "string", "minLength": 1, "maxLength": 80, "description": "例如 401、RATE_LIMIT_EXCEEDED、INSUFFICIENT_SCOPE"}},
             lookup_error_code,
             required=["error_code"],
         ),
