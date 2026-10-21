@@ -89,6 +89,30 @@ SaaSBridge/
   compose.app.yaml        Application, console and optional monitoring
 ```
 
+## One-click startup on Windows
+
+Install Docker Desktop once and configure the private `.env` file as described
+below. Then double-click **[Start SaaSBridge.vbs](Start%20SaaSBridge.vbs)** in the
+project folder. No terminal or local Python/Node installation is needed.
+
+The launcher shows a progress window, opens Docker Desktop if its engine is
+stopped, builds and starts the complete stack, checks the backend and frontend,
+and opens **http://127.0.0.1:5175/** in your default browser. The first build needs
+internet access and can take several minutes. Later launches reuse Docker's
+build cache and include source changes automatically. Port 5173 is not used.
+
+Once the app opens, its containers keep running in the background. Use Docker
+Desktop's **Containers** view to stop the `saasbridge` group when finished.
+Double-click the launcher again whenever you want to start it. Closing the
+launcher during startup cancels its command; containers already started may
+remain running and can be stopped in Docker Desktop.
+
+If startup fails, the window explains the next step. **Open log** shows the
+local `logs/launcher.log`, which is excluded from Git and the Docker build.
+The launcher preserves `.env` and never reads model keys or sends test prompts.
+You can also right-click the launcher in File Explorer and choose **Show more
+options > Send to > Desktop (create shortcut)** for a desktop shortcut.
+
 ## Local setup (PowerShell, Python 3.12)
 
 ```powershell
