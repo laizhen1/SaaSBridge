@@ -318,3 +318,25 @@ async def test_http_timing_includes_memory_commit_and_metrics_work_without_extra
     histogram.observe(3000)
     assert next(s.value for s in histogram.collect()[0].samples
                 if s.name.endswith("_bucket") and s.labels["le"] == "3000.0") == 1
+
+
+@pytest.mark.asyncio
+async def test_retrieved_sources_reach_chat_and_idempotent_replay(services):
+    from agents.tools import build_shared_rag_tools
+    memory, orch, model, http = services
+    manager = SimpleNamespace(search_with_rewrite=AsyncMock(return_value=SimpleNamespace(
+        success=True, reranked=True, data=[{"title":"Refund guide", "document_id":"refund",
+        "version":"v1", "product_version":"2026", "source":"https://example.com/docs?token=private",
+        "content":"Reference content"}]
+    )))
+    orch.set_shared_tools(build_shared_rag_tools(manager))
+    model.messages.create.side_effect = [SimpleNamespace(content=[{"type":"tool_use", "id":"kb1",
+        "name":"search_knowledge_base", "input":{"query":"refund policy"}}], stop_reason="tool_use"), text_response()]
+    first = await http.post("/chat", json=body())
+    assert first.status_code == 200
+    expected = [{"title":"Refund guide", "document_id":"refund", "version":"v1",
+                 "product_version":"2026", "source":"https://example.com/docs"}]
+    assert first.json()["knowledge_sources"] == expected
+    repeat = await http.post("/chat", json=body())
+    assert repeat.json() == first.json()
+    assert manager.search_with_rewrite.await_count == 1

@@ -123,6 +123,8 @@ pre { margin: 10px 0 0; padding: 12px; background: var(--soft); border: 1px soli
 .backend-tabs button { min-height: 26px; padding: 0 14px; background: transparent; color: var(--faint); border-radius: 5px; font-size: 11px; }
 .backend-tabs button.active { background: white; box-shadow: 0 1px 3px #18181b10; color: var(--ink); }
 .backend-tabs button:hover:not(.active) { color: var(--ink); background: #f0f0f1; }
+.language-switch { min-height: 34px; min-width: 68px; padding: 0 11px; border: 1px solid var(--line); background: white; color: var(--muted); font-size: 12px; }
+.language-switch:hover:not(:disabled) { background: var(--soft); color: var(--ink); }
 .settings-button { width: 30px; min-height: 30px; }
 .settings-button .icon { width: 17px; height: 17px; }
 .page-chat { display: flex; flex-direction: column; flex: 1; min-height: 0; }
@@ -377,6 +379,7 @@ summary::-webkit-details-marker { display: none; }
   .connection-status { display: none; }
   .backend-tabs { padding: 3px; }
   .backend-tabs button { min-height: 25px; padding: 0 11px; font-size: 10px; }
+  .language-switch { min-height: 33px; min-width: 60px; padding-inline: 8px; font-size: 11px; }
   .settings-button { width: 28px; min-height: 30px; }
   .chat-toolbar { height: 46px; padding: 0 22px; }
   .conversation-label { font-size: 11px; }
@@ -433,9 +436,9 @@ summary::-webkit-details-marker { display: none; }
   .toast { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
 }
 @media (max-width: 420px) {
-  .topbar { padding-inline: 17px; }
+  .topbar { padding-inline: 17px; gap: 8px; }
   .mobile-brand { gap: 7px; font-size: 17px; }
-  .topbar-tools { gap: 6px; }
+  .topbar-tools { gap: 4px; }
   .backend-tabs button { padding-inline: 9px; }
   .chat-toolbar { padding-inline: 17px; }
   .conversation { padding-inline: 17px; }
@@ -472,3 +475,8 @@ summary::-webkit-details-marker { display: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *:before, *:after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* Retrieved document metadata stays secondary to the answer. */
+.knowledge-sources ol { margin: 8px 0; padding-left: 24px; }
+.knowledge-sources li { margin: 10px 0; overflow-wrap: anywhere; }
+.knowledge-sources small { display: block; margin-top: 4px; color: var(--text-secondary, #64748b); }

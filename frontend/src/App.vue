@@ -1,40 +1,40 @@
 <template>
   <div class="app-shell" :class="`view-${activeView}`">
-    <aside class="navigation-rail" aria-label="主导航">
-      <a class="brand" href="#" @click.prevent="activeView = 'chat'" aria-label="SaaSBridge 首页">
+    <aside class="navigation-rail" :aria-label="t('主导航')">
+      <a class="brand" href="#" @click.prevent="activeView = 'chat'" :aria-label="t('SaaSBridge 首页')">
         <span class="brand-mark">S</span>
         <span class="brand-name">SaaSBridge</span>
       </a>
       <button class="new-chat-button" @click="activeView = 'chat'; clearConversation()">
         <AppIcon name="plus" />
-        <span>新对话</span>
+        <span>{{ t('新对话') }}</span>
       </button>
-      <span class="nav-caption">工作空间</span>
+      <span class="nav-caption">{{ t('工作空间') }}</span>
       <nav class="view-nav">
         <button
           v-for="view in views"
           :key="view.id"
-          :aria-label="view.label"
+          :aria-label="t(view.label)"
           :class="{ active: activeView === view.id }"
           :aria-current="activeView === view.id ? 'page' : undefined"
           @click="activeView = view.id"
         >
           <AppIcon :name="view.icon" />
-          <span>{{ view.label }}</span>
+          <span>{{ t(view.label) }}</span>
           <AppIcon class="nav-chevron" name="chevron" />
         </button>
       </nav>
       <div class="rail-bottom">
-        <a class="docs-link" aria-label="API 文档" :href="docsUrl" target="_blank" rel="noreferrer">
+        <a class="docs-link" :aria-label="t('API 文档')" :href="docsUrl" target="_blank" rel="noreferrer">
           <AppIcon name="document" />
-          <span>API 文档</span>
+          <span>{{ t('API 文档') }}</span>
           <AppIcon name="northeast" />
         </a>
-        <button class="user-button" aria-label="当前用户与会话配置" @click="openConnection">
+        <button class="user-button" :aria-label="t('当前用户与会话配置')" @click="openConnection">
           <span class="avatar">{{ userInitial }}</span>
           <span>
             <strong>{{ settings.userId || 'anonymous' }}</strong>
-            <small>个人工作空间</small>
+            <small>{{ t('个人工作空间') }}</small>
           </span>
           <AppIcon name="sliders" />
         </button>
@@ -43,20 +43,20 @@
     <main class="workspace">
       <header class="topbar">
         <div class="page-breadcrumb">
-          <span>工作空间</span>
+          <span>{{ t('工作空间') }}</span>
           <AppIcon name="chevron" />
-          <strong>{{ currentView.label }}</strong>
+          <strong>{{ t(currentView.label) }}</strong>
         </div>
-        <a class="mobile-brand" href="#" @click.prevent="activeView = 'chat'" aria-label="SaaSBridge 首页">
+        <a class="mobile-brand" href="#" @click.prevent="activeView = 'chat'" :aria-label="t('SaaSBridge 首页')">
           <span class="brand-mark">S</span>
           <span>SaaSBridge</span>
         </a>
         <div class="topbar-tools">
-          <span class="connection-status" :title="statusText || healthLabel">
+          <span class="connection-status" :title="t(statusText || healthLabel)">
             <i :class="healthOk ? 'online' : 'offline'"></i>
-            {{ healthOk ? '已连接' : healthLabel === '未检查' ? '连接中' : '未连接' }}
+            {{ healthOk ? t('已连接') : healthLabel === '未检查' ? t('连接中') : t('未连接') }}
           </span>
-          <div class="backend-tabs" aria-label="选择后端">
+          <div class="backend-tabs" :aria-label="t('选择后端')">
             <button
               v-for="backend in ['python']"
               :key="backend"
@@ -67,74 +67,96 @@
               {{ backend === 'java' ? 'Java' : 'Python' }}
             </button>
           </div>
-          <button class="icon-button settings-button" aria-label="连接配置" title="连接配置" @click="openConnection">
+          <button
+            type="button"
+            class="language-switch"
+            :aria-label="locale === 'zh' ? 'Switch to English' : '切换为中文'"
+            :title="locale === 'zh' ? 'Switch to English' : '切换为中文'"
+            :lang="locale === 'zh' ? 'en' : 'zh-CN'"
+            @click="setLocale(locale === 'zh' ? 'en' : 'zh')"
+          >
+            {{ locale === 'zh' ? 'English' : '中文' }}
+          </button>
+          <button class="icon-button settings-button" :aria-label="t('连接配置')" :title="t('连接配置')" @click="openConnection">
             <AppIcon name="sliders" />
           </button>
         </div>
       </header>
       <div v-if="toast" class="toast" role="status">
         <AppIcon name="chat" />
-        {{ toast }}
+        {{ t(toast.key, toast.params) }}
       </div>
       <section v-if="activeView === 'chat'" class="page-chat">
         <div class="chat-toolbar">
           <span class="conversation-label">
-            {{ messages.length ? '当前对话' : '新对话' }}
-            <span v-if="messages.length" class="conversation-count">{{ messages.length }} 条消息</span>
+            {{ messages.length ? t('当前对话') : t('新对话') }}
+            <span v-if="messages.length" class="conversation-count">{{ t('{count} 条消息', { count: messages.length }) }}</span>
           </span>
           <div class="chat-toolbar-actions">
-            <button class="icon-button" @click="clearConversation" aria-label="新对话" title="新对话">
+            <button class="icon-button" @click="clearConversation" :aria-label="t('新对话')" :title="t('新对话')">
               <AppIcon name="compose" />
             </button>
             <button class="trace-toggle" @click="inspectorDialog.showModal()">
               <AppIcon name="panel" />
-              <span>运行详情</span>
+              <span>{{ t('运行详情') }}</span>
             </button>
           </div>
         </div>
         <div class="conversation-layout" :class="{ 'has-conversation': messages.length }">
-          <section class="conversation" :class="{ 'is-empty': !messages.length }" aria-label="客服对话">
-            <div class="messages" ref="messageList" role="log" aria-label="对话消息" aria-live="polite" :aria-busy="busy && pendingAction === 'chat'">
+          <section class="conversation" :class="{ 'is-empty': !messages.length }" :aria-label="t('客服对话')">
+            <div class="messages" ref="messageList" role="log" :aria-label="t('对话消息')" aria-live="polite" :aria-busy="busy && pendingAction === 'chat'">
               <div v-if="!messages.length" class="welcome">
                 <div class="welcome-mark" aria-hidden="true">S</div>
-                <h1>今天，需要解决什么？</h1>
-                <p>API 对接、产品引导、订阅与企业账户，由合适的 Agent 接手。</p>
+                <h1>{{ t('今天，需要解决什么？') }}</h1>
+                <p>{{ t('API 对接、产品引导、订阅与企业账户，由合适的 Agent 接手。') }}</p>
               </div>
               <template v-else>
                 <article v-for="item in messages" :key="item.id" :class="['message', item.role, { 'message-error': item.error }]">
                   <span v-if="item.role === 'assistant'" class="message-avatar">S</span>
                   <div class="message-content">
                     <div class="message-meta">
-                      <strong>{{ item.role === 'user' ? '你' : 'SaaSBridge' }}</strong>
-                      <span v-if="item.error" class="error-label">请求失败</span>
+                      <strong>{{ item.role === 'user' ? t('你') : 'SaaSBridge' }}</strong>
+                      <span v-if="item.error" class="error-label">{{ t('请求失败') }}</span>
                       <small v-else-if="item.role === 'assistant'">{{ currentBackend.label }} Agent</small>
                     </div>
-                    <p>{{ item.content }}</p>
+                    <p>{{ item.error ? t(item.content) : item.content }}</p>
                     <span v-if="item.meta && !item.error" class="agent-tag">
                       <AppIcon name="route" />
-                      {{ item.meta }}
+                      {{ item.meta.map(label => t(label)).join(' · ') }}
                     </span>
+                    <details v-if="item.sources?.length" class="message-trace knowledge-sources">
+                      <summary><AppIcon name="chevron" /><span>{{ t('检索参考资料') }}</span><span class="count-tag">{{ item.sources.length }}</span></summary>
+                      <p class="muted">{{ t('以下资料由知识库检索返回，不代表答案已逐句核验。') }}</p>
+                      <ol>
+                        <li v-for="(source, index) in item.sources" :key="index">
+                          <strong>{{ source.title }}</strong>
+                          <small v-if="source.product_version">{{ t('产品版本') }}: {{ source.product_version }}</small>
+                          <small v-if="source.version">{{ t('文档版本') }}: {{ source.version.slice(0, 12) }}</small>
+                          <small v-if="source.source">{{ t('来源') }}: {{ source.source }}</small>
+                        </li>
+                      </ol>
+                    </details>
                     <details v-if="item.trace?.toolCalls?.length || item.trace?.toolsUsed?.length" class="message-trace">
                       <summary>
                         <AppIcon name="chevron" />
-                        <span>工具调用</span>
+                        <span>{{ t('工具调用') }}</span>
                         <span class="count-tag">{{ item.trace.toolCalls?.length || 0 }}</span>
                       </summary>
                       <div v-for="(call, index) in item.trace.toolCalls" :key="`${item.id}-${index}`" class="trace-call-item">
                         <div class="trace-call-meta">
                           <strong>{{ call.tool_name || 'unknown_tool' }}</strong>
-                          <span :class="call.success ? 'success' : 'danger'">{{ call.success ? '成功' : '失败' }}</span>
+                          <span :class="call.success ? 'success' : 'danger'">{{ call.success ? t('成功') : t('失败') }}</span>
                         </div>
                         <pre>{{ formatJson(call.input || {}) }}</pre>
                       </div>
-                      <p v-if="!item.trace.toolCalls?.length" class="muted">已调用：{{ item.trace.toolsUsed.join(' · ') }}</p>
+                      <p v-if="!item.trace.toolCalls?.length" class="muted">{{ t('已调用：{tools}', { tools: item.trace.toolsUsed.join(' · ') }) }}</p>
                     </details>
                     <button
                       v-if="item.role === 'assistant' && !item.error"
                       class="icon-button copy-button"
                       @click="copyMessage(item.content)"
-                      aria-label="复制回复"
-                      title="复制回复"
+                      :aria-label="t('复制回复')"
+                      :title="t('复制回复')"
                     >
                       <AppIcon name="copy" />
                     </button>
@@ -147,7 +169,7 @@
                     <i></i>
                     <i></i>
                   </span>
-                  <span>正在处理问题</span>
+                  <span>{{ t('正在处理问题') }}</span>
                 </div>
               </template>
             </div>
@@ -157,8 +179,8 @@
                   ref="composerInput"
                   v-model="draft"
                   rows="2"
-                  aria-label="客户问题"
-                  placeholder="输入你的问题…"
+                  :aria-label="t('客户问题')"
+                  :placeholder="t('输入你的问题…')"
                   @keydown.meta.enter.prevent="performAction('chat', sendMessage)"
                   @keydown.ctrl.enter.prevent="performAction('chat', sendMessage)"
                 >
@@ -166,7 +188,7 @@
                 <div class="composer-bottom">
                   <span class="routing-label">
                     <AppIcon name="route" />
-                    自动路由
+                    {{ t('自动路由') }}
                   </span>
                   <div class="send-controls">
                     <span class="keyboard-hint">⌘ / Ctrl + Enter</span>
@@ -174,8 +196,8 @@
                       class="send-button"
                       type="submit"
                       :disabled="busy || !draft.trim()"
-                      :aria-label="busy && pendingAction === 'chat' ? '处理中' : '发送'"
-                      :title="busy && pendingAction === 'chat' ? '处理中' : '发送'"
+                      :aria-label="busy && pendingAction === 'chat' ? t('处理中') : t('发送')"
+                      :title="busy && pendingAction === 'chat' ? t('处理中') : t('发送')"
                     >
                       <AppIcon :name="busy && pendingAction === 'chat' ? 'refresh' : 'arrow'" :class="{ spinning: busy && pendingAction === 'chat' }" />
                     </button>
@@ -183,22 +205,22 @@
                 </div>
               </form>
               <div v-if="!messages.length" class="prompt-grid">
-                <button v-for="prompt in prompts" :key="prompt.label" @click="usePrompt(prompt.text)">
+                <button v-for="prompt in prompts" :key="prompt.label" @click="usePrompt(t(prompt.text))">
                   <AppIcon :name="prompt.icon" />
                   <span>
-                    <strong>{{ prompt.label }}</strong>
-                    <small>{{ prompt.description }}</small>
+                    <strong>{{ t(prompt.label) }}</strong>
+                    <small>{{ t(prompt.description) }}</small>
                   </span>
                   <AppIcon class="prompt-arrow" name="northeast" />
                 </button>
               </div>
-              <p class="composer-note">AI 生成的内容可能不准确，请结合业务规则核实。</p>
+              <p class="composer-note">{{ t('AI 生成的内容可能不准确，请结合业务规则核实。') }}</p>
             </div>
           </section>
-          <aside v-if="messages.length" class="inspector-desktop" aria-label="请求追踪与运行状态">
+          <aside v-if="messages.length" class="inspector-desktop" :aria-label="t('请求追踪与运行状态')">
             <div class="inspector-heading">
               <AppIcon name="panel" />
-              <h2>运行详情</h2>
+              <h2>{{ t('运行详情') }}</h2>
             </div>
             <RequestInspector :last-response="lastResponse" :last-trace="lastTrace" :busy="busy && pendingAction === 'chat'" :monitor-data="monitorData" @refresh="loadMonitor" />
           </aside>
@@ -207,29 +229,29 @@
       <section v-else-if="activeView === 'knowledge'" class="page page-knowledge">
         <div class="page-heading">
           <div class="heading-copy">
-            <span class="kicker">KNOWLEDGE OPERATIONS</span>
-            <h1>知识库</h1>
-            <p>管理业务知识，为每次回答提供依据。</p>
+            <span class="kicker">{{ t('知识管理') }}</span>
+            <h1>{{ t('知识库') }}</h1>
+            <p>{{ t('管理业务知识，为每次回答提供依据。') }}</p>
           </div>
           <div class="count-display">
             <strong>{{ knowledgeCount }}</strong>
-            <span>知识片段</span>
+            <span>{{ t('知识片段') }}</span>
           </div>
         </div>
         <div class="knowledge-layout">
           <section class="workspace-card search-workspace">
             <div class="card-heading">
               <div>
-                <span class="kicker">RETRIEVAL</span>
-                <h2>检索知识</h2>
+                <span class="kicker">{{ t('知识检索') }}</span>
+                <h2>{{ t('检索知识') }}</h2>
               </div>
               <AppIcon name="search" />
             </div>
             <form class="search-line" @submit.prevent="performAction('search', searchKnowledge)">
-              <input v-model="searchQuery" aria-label="检索问题" placeholder="例如：API 认证失败如何排查" />
+              <input v-model="searchQuery" :aria-label="t('检索问题')" :placeholder="t('例如：API 认证失败如何排查')" />
               <button :disabled="busy || !searchQuery.trim()">
                 <AppIcon name="search" />
-                {{ busy && pendingAction === 'search' ? '检索中' : '搜索' }}
+                {{ busy && pendingAction === 'search' ? t('检索中') : t('搜索') }}
               </button>
             </form>
             <div v-if="searchResults.length" class="result-list">
@@ -237,105 +259,105 @@
                 <span class="result-number">{{ String(index + 1).padStart(2, '0') }}</span>
                 <div>
                   <div class="result-title">
-                    <strong>{{ item.title || '未命名文档' }}</strong>
-                    <small>相关度 {{ item.score ?? '—' }}</small>
+                    <strong>{{ item.title || t('未命名文档') }}</strong>
+                    <small>{{ t('相关度 {score}', { score: item.score ?? '—' }) }}</small>
                   </div>
-                  <p>{{ item.content }}</p>
+                  <p>{{ item.error ? t(item.content) : item.content }}</p>
                 </div>
               </article>
             </div>
             <div v-else class="workspace-empty">
               <AppIcon name="book" />
-              <h3>{{ searched ? '暂未找到相关知识' : '搜索你的知识库' }}</h3>
-              <p>{{ searched ? '尝试换一个问题，或添加更多知识文档。' : '输入客户问题，查看最相关的知识片段。' }}</p>
+              <h3>{{ searched ? t('暂未找到相关知识') : t('搜索你的知识库') }}</h3>
+              <p>{{ searched ? t('尝试换一个问题，或添加更多知识文档。') : t('输入客户问题，查看最相关的知识片段。') }}</p>
             </div>
           </section>
           <section class="workspace-card import-workspace">
             <div class="card-heading">
               <div>
-                <span class="kicker">INGESTION</span>
-                <h2>添加知识</h2>
+                <span class="kicker">{{ t('知识导入') }}</span>
+                <h2>{{ t('添加知识') }}</h2>
               </div>
               <AppIcon name="document" />
             </div>
             <form @submit.prevent="performAction('import', submitKnowledge)">
               <label>
-                <span>文档标题</span>
-                <input v-model="docTitle" required placeholder="例如：API 接入说明" />
+                <span>{{ t('文档标题') }}</span>
+                <input v-model="docTitle" required :placeholder="t('例如：API 接入说明')" />
               </label>
               <label>
-                <span>知识内容</span>
-                <textarea v-model="docContent" required rows="7" placeholder="输入客服规范、产品说明或排障流程"></textarea>
+                <span>{{ t('知识内容') }}</span>
+                <textarea v-model="docContent" required rows="7" :placeholder="t('输入客服规范、产品说明或排障流程')"></textarea>
               </label>
               <div class="side-actions">
                 <button :disabled="busy || !docTitle.trim() || !docContent.trim()">
                   <AppIcon name="arrow" />
-                  {{ busy && pendingAction === 'import' ? '添加中' : '添加文档' }}
+                  {{ busy && pendingAction === 'import' ? t('添加中') : t('添加文档') }}
                 </button>
                 <label class="upload-button" :class="{ disabled: busy }">
                   <AppIcon name="upload" />
-                  上传文件
+                  {{ t('上传文件') }}
                   <input :disabled="busy" type="file" accept=".txt,.md,.json,.yaml,.yml" @change="performAction('upload', handleUpload, $event)" />
                 </label>
               </div>
-              <p class="form-hint">支持 TXT、Markdown、JSON 文档与 OpenAPI 3.0/3.1（JSON / YAML），最大 10 MB。</p>
+              <p class="form-hint">{{ t('支持 TXT、Markdown、JSON 文档与 OpenAPI 3.0/3.1（JSON / YAML），最大 10 MB。') }}</p>
             </form>
           </section>
         </div>
         <section class="workspace-card skills-workspace">
           <div class="card-heading">
             <div>
-              <span class="kicker">LOADED SKILLS</span>
-              <h2>已加载能力</h2>
+              <span class="kicker">{{ t('能力管理') }}</span>
+              <h2>{{ t('已加载能力') }}</h2>
             </div>
             <button class="text-button" :disabled="busy" @click="performAction('skills', reloadSkillSet)">
               <AppIcon name="refresh" />
-              重新加载
+              {{ t('重新加载') }}
             </button>
           </div>
           <div class="skill-table">
             <div v-for="skill in skillsData.skills" :key="skill.name" class="skill-item">
               <span class="skill-dot"></span>
               <strong>{{ skill.name }}</strong>
-              <span>{{ skill.description || '业务规范能力' }}</span>
-              <small>{{ skill.content_chars || 0 }} chars</small>
+              <span>{{ skill.description || t('业务规范能力') }}</span>
+              <small>{{ t('{count} 字符', { count: skill.content_chars || 0 }) }}</small>
             </div>
-            <p v-if="!skillsData.skills?.length" class="skills-empty">暂无已加载能力，连接服务后刷新查看。</p>
+            <p v-if="!skillsData.skills?.length" class="skills-empty">{{ t('暂无已加载能力，连接服务后刷新查看。') }}</p>
           </div>
         </section>
       </section>
       <section v-else class="page page-evaluation">
         <div class="page-heading">
           <div class="heading-copy">
-            <span class="kicker">EVALUATION LAB</span>
-            <h1>评测中心</h1>
-            <p>检查意图识别、回复质量与回归结果。</p>
+            <span class="kicker">{{ t('评测实验室') }}</span>
+            <h1>{{ t('评测中心') }}</h1>
+            <p>{{ t('检查意图识别、回复质量与回归结果。') }}</p>
           </div>
           <button @click="performAction('evaluation', runEvaluation)" :disabled="busy">
             <AppIcon :name="busy && pendingAction === 'evaluation' ? 'refresh' : 'play'" :class="{ spinning: busy && pendingAction === 'evaluation' }" />
-            {{ busy && pendingAction === 'evaluation' ? '评测运行中' : '运行评测' }}
+            {{ busy && pendingAction === 'evaluation' ? t('评测运行中') : t('运行评测') }}
           </button>
         </div>
         <div v-if="evalData" class="evaluation-content">
           <div class="evaluation-summary">
             <div class="score-hero">
-              <span>PASS RATE · 通过率</span>
-              <strong :class="{ 'no-score': evalData.valid_total === 0 }">{{ evalData.valid_total === 0 ? '无有效评分' : formatPercent(evalData.pass_rate) }}</strong>
-              <small>{{ evalData.passed }} / {{ evalData.valid_total ?? evalData.total }} 有效用例通过</small>
+              <span>{{ t('通过率') }}</span>
+              <strong :class="{ 'no-score': evalData.valid_total === 0 }">{{ evalData.valid_total === 0 ? t('无有效评分') : formatPercent(evalData.pass_rate) }}</strong>
+              <small>{{ t('{passed} / {total} 有效用例通过', { passed: evalData.passed, total: evalData.valid_total ?? evalData.total }) }}</small>
             </div>
             <div>
-              <span>通过用例</span>
+              <span>{{ t('通过用例') }}</span>
               <strong>{{ evalData.passed }}</strong>
             </div>
             <div>
-              <span>总数 / 评分失败</span>
+              <span>{{ t('总数 / 评分失败') }}</span>
               <strong>
                 {{ evalData.total }}
                 <small> / {{ evalData.evaluation_errors ?? 0 }}</small>
               </strong>
             </div>
             <div>
-              <span>回归问题</span>
+              <span>{{ t('回归问题') }}</span>
               <strong :class="evalData.regressions?.length ? 'danger' : 'success'">{{ evalData.regressions?.length || 0 }}</strong>
             </div>
           </div>
@@ -343,11 +365,11 @@
             <section class="workspace-card">
               <div class="card-heading">
                 <div>
-                  <span class="kicker">QUALITY SCORES</span>
-                  <h2>平均评分</h2>
+                  <span class="kicker">{{ t('质量评分') }}</span>
+                  <h2>{{ t('平均评分') }}</h2>
                 </div>
               </div>
-              <p v-if="!Object.keys(evalData.avg_scores || {}).length" class="muted">没有有效评分，请查看失败原因。</p>
+              <p v-if="!Object.keys(evalData.avg_scores || {}).length" class="muted">{{ t('没有有效评分，请查看失败原因。') }}</p>
               <div class="score-list">
                 <div v-for="(value, key) in evalData.avg_scores" :key="key">
                   <span>{{ key }}</span>
@@ -361,23 +383,23 @@
             <section class="workspace-card">
               <div class="card-heading">
                 <div>
-                  <span class="kicker">RECOMMENDATIONS</span>
-                  <h2>优化建议</h2>
+                  <span class="kicker">{{ t('改进建议') }}</span>
+                  <h2>{{ t('优化建议') }}</h2>
                 </div>
               </div>
               <p v-if="evalData.regression_note" class="muted">{{ evalData.regression_note }}</p>
               <div v-if="evalData.recommendations?.length" class="recommendations">
                 <p v-for="(item, index) in evalData.recommendations" :key="index">{{ item }}</p>
               </div>
-              <p v-else class="muted">本次评测没有返回额外建议。</p>
+              <p v-else class="muted">{{ t('本次评测没有返回额外建议。') }}</p>
               <div v-for="(result, index) in evalData.regressions || []" :key="index" class="evaluation-warning">
-                <strong class="danger">回归问题</strong>
+                <strong class="danger">{{ t('回归问题') }}</strong>
                 <p>{{ typeof result === 'string' ? result : formatJson(result) }}</p>
               </div>
               <div v-for="result in (evalData.results || []).filter(item => item.metadata?.judge_failed)" :key="result.test_id" class="evaluation-warning">
-                <strong class="danger">{{ result.test_id }}：评分失败</strong>
-                <p>{{ result.metadata.judge_error || '模型未返回有效评分' }}</p>
-                <small>{{ result.metadata.judge_attempts ?? '—' }} 次尝试</small>
+                <strong class="danger">{{ t('{id}：评分失败', { id: result.test_id }) }}</strong>
+                <p>{{ result.metadata.judge_error || t('模型未返回有效评分') }}</p>
+                <small>{{ t('{count} 次尝试', { count: result.metadata.judge_attempts ?? '—' }) }}</small>
               </div>
             </section>
           </div>
@@ -386,12 +408,12 @@
           <span class="empty-emblem">
             <AppIcon name="chart" />
           </span>
-          <h2>{{ busy && pendingAction === 'evaluation' ? '正在检验每一份答案。' : '了解 Agent 的表现' }}</h2>
-          <p>{{ busy && pendingAction === 'evaluation' ? '评测需要一些时间，结果返回后会显示在这里。' : '运行一次评测，了解 Agent 的表现与改进空间。' }}</p>
+          <h2>{{ busy && pendingAction === 'evaluation' ? t('正在检验每一份答案。') : t('了解 Agent 的表现') }}</h2>
+          <p>{{ busy && pendingAction === 'evaluation' ? t('评测需要一些时间，结果返回后会显示在这里。') : t('运行一次评测，了解 Agent 的表现与改进空间。') }}</p>
           <div class="evaluation-dimensions">
-            <span>意图识别</span>
-            <span>回复质量</span>
-            <span>回归检测</span>
+            <span>{{ t('意图识别') }}</span>
+            <span>{{ t('回复质量') }}</span>
+            <span>{{ t('回归检测') }}</span>
           </div>
         </div>
       </section>
@@ -400,9 +422,9 @@
       <div class="drawer-heading">
         <div>
           <AppIcon name="panel" />
-          <h2 id="inspector-title">运行详情</h2>
+          <h2 id="inspector-title">{{ t('运行详情') }}</h2>
         </div>
-        <button class="icon-button" aria-label="关闭运行详情" @click="inspectorDialog.close()">
+        <button class="icon-button" :aria-label="t('关闭运行详情')" @click="inspectorDialog.close()">
           <AppIcon name="close" />
         </button>
       </div>
@@ -411,48 +433,48 @@
     <dialog ref="connectionDialog" class="connection-dialog" @click="closeOnBackdrop" aria-labelledby="connection-title">
       <div class="dialog-heading">
         <div>
-          <span class="kicker">CONNECTION</span>
-          <h2 id="connection-title">连接配置</h2>
+          <span class="kicker">{{ t('服务连接') }}</span>
+          <h2 id="connection-title">{{ t('连接配置') }}</h2>
         </div>
-        <button class="icon-button" aria-label="关闭连接配置" @click="connectionDialog.close()">
+        <button class="icon-button" :aria-label="t('关闭连接配置')" @click="connectionDialog.close()">
           <AppIcon name="close" />
         </button>
       </div>
-      <p class="dialog-description">配置 {{ currentBackend.label }} 服务与当前会话。</p>
+      <p class="dialog-description">{{ t('配置 {backend} 服务与当前会话。', { backend: currentBackend.label }) }}</p>
       <form @submit.prevent="saveConnection">
         <label>
-          <span>服务地址</span>
-          <input v-model="connectionDraft.endpoint" required placeholder="/api/python 或 http://localhost:8000" />
-          <small>使用代理路径或完整的 HTTP / HTTPS 地址。</small>
+          <span>{{ t('服务地址') }}</span>
+          <input v-model="connectionDraft.endpoint" required :placeholder="t('/api/python 或 http://localhost:8000')" />
+          <small>{{ t('使用代理路径或完整的 HTTP / HTTPS 地址。') }}</small>
         </label>
         <label>
-          <span>用户 ID</span>
+          <span>{{ t('用户 ID') }}</span>
           <input v-model="connectionDraft.userId" placeholder="u1001" />
         </label>
         <label>
-          <span>会话 ID</span>
-          <input v-model="connectionDraft.conversationId" placeholder="留空以自动生成" />
+          <span>{{ t('会话 ID') }}</span>
+          <input v-model="connectionDraft.conversationId" :placeholder="t('留空以自动生成')" />
         </label>
         <label v-if="settings.backend === 'python'">
-          <span>API 访问 Token（启用鉴权时填写，仅本页保存）</span>
-          <input v-model="connectionDraft.pythonToken" type="password" autocomplete="off" placeholder="不是模型 API Key" />
+          <span>{{ t('API 访问 Token（启用鉴权时填写，仅本页保存）') }}</span>
+          <input v-model="connectionDraft.pythonToken" type="password" autocomplete="off" :placeholder="t('不是模型 API Key')" />
         </label>
         <div class="dialog-health">
           <i :class="healthOk ? 'online' : 'offline'"></i>
-          <span>{{ healthOk ? '服务已连接' : healthLabel }}</span>
+          <span>{{ healthOk ? t('服务已连接') : t(healthLabel) }}</span>
           <button type="button" class="text-button" @click="checkHealth">
-            检查当前连接
+            {{ t('检查当前连接') }}
             <AppIcon name="refresh" />
           </button>
         </div>
         <details v-if="statusText" class="connection-detail">
-          <summary>查看连接详情</summary>
-          <pre>{{ statusText }}</pre>
+          <summary>{{ t('查看连接详情') }}</summary>
+          <pre>{{ t(statusText) }}</pre>
         </details>
         <div class="dialog-actions">
-          <button type="button" class="quiet-button" @click="connectionDialog.close()">取消</button>
+          <button type="button" class="quiet-button" @click="connectionDialog.close()">{{ t('取消') }}</button>
           <button type="submit">
-            保存配置
+            {{ t('保存配置') }}
             <AppIcon name="check" />
           </button>
         </div>
@@ -462,6 +484,8 @@
 </template>
 
 <script setup>
+import { locale, t, setLocale } from './lib/i18n.js'
+
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
   addKnowledge,
@@ -495,7 +519,7 @@ const healthOk = ref(false)
 const healthLabel = ref('未检查')
 const statusText = ref('')
 const knowledgeCount = ref('-')
-const searchQuery = ref('API 认证失败如何排查')
+const searchQuery = ref('')
 const searchResults = ref([])
 const docTitle = ref('')
 const docContent = ref('')
@@ -713,8 +737,8 @@ async function sendMessage() {
     if (!request.isCurrent()) return
     lastResponse.value = response
     lastTrace.value = trace
-    const meta = [response.intent, response.primaryAgent || response.agentType, response.knowledgeUsed ? 'RAG' : '', response.escalated ? '转人工' : ''].filter(Boolean).join(' · ')
-    messages.value.push({ id: createMessageId(), role: 'assistant', content: response.response, meta, trace: lastTrace.value?.trace || null })
+    const meta = [response.intent, response.primaryAgent || response.agentType, response.knowledgeUsed ? 'RAG' : '', response.escalated ? '转人工' : ''].filter(Boolean)
+    messages.value.push({ id: createMessageId(), role: 'assistant', content: response.response, sources: response.knowledgeSources || [], meta, trace: lastTrace.value?.trace || null })
     await loadMonitor()
   } catch (error) {
     if (!request.isCurrent()) return
@@ -748,7 +772,7 @@ async function searchKnowledge() {
     if (!request.isCurrent()) return
     searchResults.value = data.results || []
     searched.value = true
-    showToast(`检索完成，返回 ${searchResults.value.length} 条结果`)
+    showToast('检索完成，返回 {count} 条结果', { count: searchResults.value.length })
   } catch (error) {
     if (!request.isCurrent()) return
     statusText.value = error.message
@@ -787,7 +811,7 @@ async function handleUpload(event) {
     statusText.value = JSON.stringify(data, null, 2)
     await loadStats()
     if (!request.isCurrent()) return
-    showToast(`${file.name} 导入成功`)
+    showToast('{name} 导入成功', { name: file.name })
   } catch (error) {
     if (!request.isCurrent()) return
     statusText.value = error.message
@@ -802,7 +826,7 @@ async function runEvaluation() {
     const data = await requestEvaluation(request.backend, request.settings, null, {
       isCurrent: request.isCurrent,
       onProgress: job => {
-        if (request.isCurrent()) statusText.value = `评测任务 ${job.job_id}：${job.status === 'queued' ? '排队中' : '运行中'}，已完成 ${job.completed}/${job.total} 组`
+        if (request.isCurrent()) statusText.value = t('评测任务 {id}：{status}，已完成 {completed}/{total} 组', { id: job.job_id, status: t(job.status === 'queued' ? '排队中' : '运行中'), completed: job.completed, total: job.total })
       }
     })
     if (!request.isCurrent()) return
@@ -841,8 +865,8 @@ function createMessageId() {
   return `message-${Date.now()}-${messageSequence}`
 }
 
-function showToast(message) {
-  toast.value = message
+function showToast(message, params = {}) {
+  toast.value = { key: message, params }
   clearTimeout(toastTimer)
   toastTimer = setTimeout(() => { toast.value = '' }, 2600)
 }

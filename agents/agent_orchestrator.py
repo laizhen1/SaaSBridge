@@ -43,6 +43,7 @@ from agents.tools import (
 )
 from core.intent_recognizer import IntentCategory, IntentRecognizer, UrgencyLevel
 from core.llm_utils import extract_text_content
+from core.knowledge_sources import knowledge_sources
 from core.saas_support import SAAS_KEYWORDS, keyword_matches
 
 logger = logging.getLogger(__name__)
@@ -434,6 +435,9 @@ class BaseAgent:
                             "mcp_server": result.get("mcp_server") if isinstance(result, dict) else None,
                             "mcp_tool": result.get("mcp_tool") if isinstance(result, dict) else None,
                             "retry_safe": spec.retry_safe if spec else True,
+                            **({"knowledge_sources": knowledge_sources(result.get("results"))}
+                               if name == "search_knowledge_base" and call_success and result_success is True
+                               else {}),
                         }
                     )
                     tool_results.append({

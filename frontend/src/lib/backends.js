@@ -157,6 +157,7 @@ function normalizeChatResponse(type, raw) {
     escalated: Boolean(raw.escalated),
     latencyMs: Number(raw.latency_ms ?? raw.latencyMs ?? 0),
     knowledgeUsed: Boolean(raw.knowledge_used ?? raw.knowledgeUsed),
+    knowledgeSources: Array.isArray(raw.knowledge_sources) ? raw.knowledge_sources : [],
     verified: raw.verified,
     grounded: raw.grounded,
     raw

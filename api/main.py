@@ -25,6 +25,7 @@ from fastapi import FastAPI, HTTPException, Response, UploadFile, File, Query, R
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel, Field
+from core.knowledge_sources import sources_from_traces
 
 load_dotenv()
 
@@ -299,6 +300,7 @@ class ChatResponse(BaseModel):
     escalated:   bool
     latency_ms:  float
     knowledge_used: bool = False
+    knowledge_sources: List[Dict[str, str]] = Field(default_factory=list)
     entities: Dict[str, List[str]] = Field(default_factory=dict)
     intent_confidence: float = 0.0
     intent_source_scores: Dict[str, float] = Field(default_factory=dict)
@@ -434,6 +436,7 @@ async def chat(req: ChatRequest, http_request: HTTPRequest):
                 escalated=result.escalated,
                 latency_ms=round((time.monotonic() - started) * 1000, 1),
                 knowledge_used=any(t.get("tool_name") == "search_knowledge_base" and t.get("result_success") is True for t in result.tool_traces),
+                knowledge_sources=sources_from_traces(result.tool_traces),
                 entities=orch_req.entities,
                 intent_confidence=round(intent_result.confidence, 4),
                 intent_source_scores=intent_result.source_scores,
